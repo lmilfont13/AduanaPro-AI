@@ -23,7 +23,7 @@ import {
   Zap,
   ArrowRight
 } from 'lucide-react';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import { parsePaymentReceiptWithGroq } from '../services/groqService';
 import { extractTextFromPDF } from '../services/pdfService';
 import { supabase, IS_SUPABASE_CONFIGURED } from '../lib/supabase';
@@ -71,6 +71,11 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     productImage,
     bankImage
   }), [data, exchangeRate, productName, bankDetails, recipientName, orderDate, productionDays, productImage, bankImage]);
+
+  // Sincronizar com o pai
+  useEffect(() => {
+    if (onUpdate) onUpdate(safeData);
+  }, [safeData]);
 
   useEffect(() => {
     if (!exchangeRate) {
