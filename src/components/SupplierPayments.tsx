@@ -746,67 +746,48 @@ export default function SupplierPayments({ data, onUpdate }: any) {
 
   const shareWhatsApp = () => {
     const pending = safeData.milestones.filter(m => !m.isPaid);
-    const todayStr = new Date().toISOString().split('T')[0];
     
-    const todayPayments = pending.filter(m => m.date === todayStr);
-    const futurePayments = pending.filter(m => m.date !== todayStr);
-
+    // Cálculo da Previsão de Embarque (Data do Pedido + Produção + Margem de 10 dias)
     const etdDate = (() => {
-      const d = new Date(orderDate + 'T12:00:00');
-      d.setDate(d.getDate() + productionDays + 10);
-      return d.toLocaleDateString('pt-BR');
+      try {
+        const d = new Date(orderDate + 'T12:00:00');
+        if (isNaN(d.getTime())) return "A definir";
+        d.setDate(d.getDate() + (Number(productionDays) || 0) + 10);
+        return d.toLocaleDateString('pt-BR');
+      } catch { return "A definir"; }
     })();
 
-    let text = `💼 SOLICITAÇÃO DE PAGAMENTO - ${safeData.supplierName || "FORNECEDOR"}\n\n` +
+    const cleanTag = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, '');
+    const refTag = cleanTag(safeData.ciNumber) || "Naoespecificado";
+
+    let text = `💼 *SOLICITAÇÃO DE PAGAMENTO* - ${safeData.supplierName || "FORNECEDOR N/I"}\n\n` +
                `${recipientName ? `${recipientName}, bom dia! 🏦 ` : "Bom dia! 🏦 "}gostaria de formalizar o pedido de lançamento de câmbio conforme abaixo:\n` +
-               `Ref. Pedido: ${safeData.ciNumber || "N/I"} 📄\n` +
-               `Containers: ${safeData.containerNumber || "N/I"}\n` +
-               `Produto: ${safeData.productName || "N/I"}\n` +
+               `Ref. Pedido: ${safeData.ciNumber || "Não especificado"} 📄\n` +
+               `Containers: ${safeData.containerNumber || "Não especificado"}\n` +
+               `Produto: ${safeData.productName || "Não especificado"}\n` +
                `*Previsão de Embarque: ${etdDate}* 🚢\n` +
                `----------------------------------\n` +
                `*VALOR TOTAL DO CONTRATO: 💰 ${safeData.currency} ${safeData.contractTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${safeData.exchangeRate > 0 ? ` (R$ ${(safeData.contractTotal * safeData.exchangeRate).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})` : ""}*\n` +
-               `TOTAL JÁ LIQUIDADO: ${safeData.currency} ${totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${((totalPaid/safeData.contractTotal)*100 || 0).toFixed(1)}%)\n` +
-               `SALDO REMANESCENTE: ${safeData.currency} ${balanceDue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${((balanceDue/safeData.contractTotal)*100 || 0).toFixed(1)}%)\n\n`;
+               `TOTAL JÁ LIQUIDADO: ${safeData.currency} ${totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${((totalPaid/(safeData.contractTotal || 1))*100).toFixed(1)}%)\n` +
+               `SALDO REMANESCENTE: ${safeData.currency} ${balanceDue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${((balanceDue/(safeData.contractTotal || 1))*100).toFixed(1)}%)\n\n`;
 
-    const formatDate = (dateStr: string) => {
-      try {
-        if (!dateStr) return new Date().toLocaleDateString('pt-BR');
-        const d = new Date(dateStr + 'T12:00:00');
-        if (isNaN(d.getTime())) return new Date().toLocaleDateString('pt-BR');
-        return d.toLocaleDateString('pt-BR');
-      } catch {
-        return new Date().toLocaleDateString('pt-BR');
-      }
-    };
-
-    if (todayPayments.length > 0) {
-      text += `*PARA PAGAMENTO HOJE:*\n` +
-              todayPayments.map(m => {
+    if (safeData.milestones.length > 0) {
+      text += `*PARCELAS:*\n` +
+              safeData.milestones.map(m => {
                 const pct = ((m.amount / (safeData.contractTotal || 1)) * 100).toFixed(0);
-                return `*• Vencimento: ${formatDate(m.date)} | Valor: ${safeData.currency} ${m.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${pct}%)*`;
-              }).join('\n') +
-              `\n\n`;
-    }
-
-    if (futurePayments.length > 0) {
-      text += `PARCELAS:\n` +
-              futurePayments.map(m => {
-                const pct = ((m.amount / (safeData.contractTotal || 1)) * 100).toFixed(0);
-                return `• Vencimento: ${formatDate(m.date)} | Valor: ${safeData.currency} ${m.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${pct}%)`;
+                const status = m.isPaid ? "✅ PAGO" : "⏳ A PAGAR";
+                const d = new Date(m.date + 'T12:00:00');
+                const formattedDate = isNaN(d.getTime()) ? m.date : d.toLocaleDateString('pt-BR');
+                return `• Vencimento: ${formattedDate} | Valor: ${safeData.currency} ${m.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${pct}%) | ${status}`;
               }).join('\n') +
               `\n\n`;
     }
 
     if (bankDetails) {
-      text += `🏦 DADOS BANCÁRIOS / OBSERVAÇÕES:\n${bankDetails}\n\n`;
+      text += `🏦 *DADOS BANCÁRIOS / OBSERVAÇÕES:*\n${bankDetails}\n\n`;
     }
 
-    const clean = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, '');
-    const ctnTag = clean(safeData.containerNumber);
-    const prodWords = (safeData.productName || "").split(' ').filter(w => w.length > 2);
-    const prodTag = prodWords.slice(0, 2).map(w => clean(w)).join('');
-    
-    text += `Fico no aguardo do comprovante de pagamento, obrigado! 🤝\n\n#Pagamento_${ctnTag}_${prodTag}`;
+    text += `Fico no aguardo do comprovante de pagamento, obrigado! 🤝\n\n#Pagamento_${refTag}_`;
     
     setWhatsappText(text);
     setShowMsg(true);
@@ -1144,34 +1125,32 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             </div>
 
             {/* Quadro de Auditoria Estilo Modelo */}
-            <div className="calculation-box shadow-xl border-emerald-200/50">
-               <div className="flex justify-between items-center mb-6 border-b border-emerald-200 pb-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-800">Cálculo de Auditoria Financeira</span>
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-               </div>
-               
-               <div className="space-y-4 font-mono-technical text-sm">
-                  <div className="flex flex-col">
-                     <span className="text-[9px] text-emerald-600/70 font-bold uppercase mb-1">Base de Cálculo (Total Contrato)</span>
-                     <div className="bg-emerald-100/30 p-3 rounded-xl border border-emerald-100">
-                        {safeData.currency} {safeData.contractTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                     </div>
+            <div className="calculation-box space-y-4">
+              <div className="flex justify-between items-center mb-4 border-b border-emerald-100 pb-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-800">Resumo de Auditoria</span>
+                <span className="text-[10px] font-black text-emerald-600">v2.1 LATEST</span>
+              </div>
+              
+              <div className="flex flex-col">
+                  <span className="text-[9px] text-emerald-600/70 font-bold uppercase mb-1">Total do Contrato</span>
+                  <div className="text-xl font-bold font-mono-technical">
+                    {safeData.currency} {safeData.contractTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </div>
+              </div>
 
-                  <div className="flex flex-col">
-                     <span className="text-[9px] text-emerald-600/70 font-bold uppercase mb-1">Total Liquidado (Pago)</span>
-                     <div className="bg-emerald-100/30 p-3 rounded-xl border border-emerald-100 text-emerald-700">
-                        - {safeData.currency} {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                     </div>
+              <div className="flex flex-col">
+                  <span className="text-[9px] text-emerald-600/70 font-bold uppercase mb-1">Total Liquidado (Pago)</span>
+                  <div className="text-lg font-mono-technical text-emerald-700">
+                    - {safeData.currency} {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </div>
+              </div>
 
-                  <div className="pt-4 border-t border-emerald-200 mt-4">
-                     <span className="text-[9px] text-rose-600 font-bold uppercase mb-1 block">Saldo a Pagar (Balance Due)</span>
-                     <div className="text-2xl font-black text-rose-700 tracking-tighter">
-                        {safeData.currency} {balanceDue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                     </div>
+              <div className="pt-4 border-t border-emerald-200 mt-4">
+                  <span className="text-[9px] text-rose-600 font-bold uppercase mb-1 block">Saldo a Pagar (Balance Due)</span>
+                  <div className="text-2xl font-black text-rose-700 tracking-tighter font-mono-technical">
+                    {safeData.currency} {balanceDue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </div>
-               </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1202,12 +1181,14 @@ export default function SupplierPayments({ data, onUpdate }: any) {
                     <td className="p-5">
                       <input value={m.description} onChange={(e) => updateMilestone(m.id, { description: e.target.value })} className="bg-transparent text-xs font-medium text-slate-600 outline-none w-full" />
                     </td>
-                    <td className="p-5 text-right">
-                      <div className="font-black text-slate-800 text-xs font-mono-technical">
-                        $ {m.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </div>
-                      <div className="text-[10px] font-bold text-slate-400 mt-1 font-mono-technical">
-                        {safeData.contractTotal > 0 ? ((m.amount / safeData.contractTotal) * 100).toFixed(1) : 0}%
+                    <td className="p-5">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-black text-slate-800 font-mono-technical">
+                          {safeData.currency} {m.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[9px] font-bold text-slate-400 font-mono-technical">
+                          {m.percentage.toFixed(1)}%
+                        </span>
                       </div>
                     </td>
                     <td className="p-5">
