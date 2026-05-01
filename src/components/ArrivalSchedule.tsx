@@ -268,6 +268,45 @@ export default function ArrivalSchedule() {
     }
   };
 
+  const exportData = () => {
+    const data = {
+      items,
+      catalog: JSON.parse(localStorage.getItem('ADUANAPRO_UNITS_CATALOG') || '{}'),
+      logo: localStorage.getItem('ADUANAPRO_LOGO') || ""
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AduanaPro_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    toast.success("Backup exportado com sucesso!");
+  };
+
+  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.items) {
+            setItems(data.items);
+            localStorage.setItem('ADUANAPRO_ARRIVAL_SCHEDULE', JSON.stringify(data.items));
+        }
+        if (data.catalog) localStorage.setItem('ADUANAPRO_UNITS_CATALOG', JSON.stringify(data.catalog));
+        if (data.logo) {
+          setCustomLogo(data.logo);
+          localStorage.setItem('ADUANAPRO_LOGO', data.logo);
+        }
+        toast.success("Backup importado com sucesso! Dados sincronizados.");
+      } catch (err) {
+        toast.error("Erro ao importar backup. Verifique o arquivo.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const generatePDF = () => {
     try {
       const doc = new jsPDF('landscape');
@@ -949,6 +988,15 @@ export default function ArrivalSchedule() {
           </div>
         </div>
         <div className="flex flex-wrap gap-3">
+          <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100">
+            <button onClick={exportData} className="flex items-center gap-2 px-4 py-2 text-slate-600 rounded-xl text-[9px] font-black uppercase hover:bg-white hover:shadow-sm transition-all">
+              Exportar Backup
+            </button>
+            <label className="flex items-center gap-2 px-4 py-2 text-slate-600 rounded-xl text-[9px] font-black uppercase hover:bg-white hover:shadow-sm transition-all cursor-pointer">
+              Importar Backup
+              <input type="file" className="hidden" accept=".json" onChange={importData} />
+            </label>
+          </div>
           <button onClick={loadSavedItems} className="flex items-center gap-2 px-6 py-3 bg-blue-50 text-blue-600 border border-blue-200 rounded-2xl text-[10px] font-black uppercase hover:bg-blue-100 transition-all">
             Carregar Salvos
           </button>
