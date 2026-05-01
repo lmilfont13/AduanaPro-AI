@@ -1,0 +1,5 @@
+{
+  "name": "AduanaPro AI",
+  "description": "Plataforma inteligente para despachantes aduaneiros. Cruzamento de dados de BL, checklist de operações e rascunho de LI.",
+  "requestFramePermissions": []
+}
