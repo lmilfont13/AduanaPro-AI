@@ -12,11 +12,21 @@ import {
   Calendar,
   MessageSquare,
   Save,
-  FolderOpen
+  FolderOpen,
+  Cloud,
+  CloudOff,
+  CloudUpload,
+  RefreshCw,
+  Calculator,
+  FileSearch,
+  Building2,
+  Globe,
+  User
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { parsePaymentReceiptWithGroq } from '../services/groqService';
 import { extractTextFromPDF } from '../services/pdfService';
+import { supabase, IS_SUPABASE_CONFIGURED } from '../lib/supabase';
 import { toast } from 'sonner';
 
 interface Milestone {
@@ -284,29 +294,69 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     try { return JSON.parse(localStorage.getItem('ADUANAPRO_PAYMENTS_HISTORY') || '[]'); } catch { return []; }
   });
 
-  const saveRecord = () => {
+  const saveRecord = async () => {
     if (!safeData.ciNumber && !safeData.supplierName) {
       toast.error("Informe pelo menos a Ref. Pedido / CI ou Fornecedor para salvar.");
       return;
     }
+    
+    setLoading(true);
     const recordId = safeData.ciNumber || safeData.supplierName || Math.random().toString(36).substring(2,9);
+    
+    // Objeto consolidado para salvamento
+    const dataToSave = {
+      ...safeData,
+      productImage: productImage,
+      bankImage: bankImage,
+      updated_at: new Date().toISOString()
+    };
+
     const newRecord = {
       id: recordId,
       dateSaved: new Date().toISOString(),
-      data: safeData
+      data: dataToSave
     };
     
-    const existingIndex = history.findIndex(h => h.id === recordId);
-    let newHistory = [...history];
-    if (existingIndex >= 0) {
-      newHistory[existingIndex] = newRecord;
-      toast.success("Registro atualizado com sucesso!");
-    } else {
-      newHistory.push(newRecord);
-      toast.success("Novo registro salvo!");
+    // 1. Salvamento Local (Cache Rápido)
+    try {
+      const existingIndex = history.findIndex(h => h.id === recordId);
+      let newHistory = [...history];
+      if (existingIndex >= 0) {
+        newHistory[existingIndex] = newRecord;
+      } else {
+        newHistory.push(newRecord);
+      }
+      setHistory(newHistory);
+      localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(newHistory));
+    } catch (e) {
+      console.warn("LocalStorage lotou, tentando apenas Supabase...");
     }
-    setHistory(newHistory);
-    localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(newHistory));
+
+    // 2. Salvamento na Nuvem (Supabase)
+    if (IS_SUPABASE_CONFIGURED) {
+      try {
+        const { error } = await supabase
+          .from('supplier_payments')
+          .upsert({
+            id: recordId,
+            supplier_name: safeData.supplierName,
+            ci_number: safeData.ciNumber,
+            contract_total: safeData.contractTotal,
+            data: dataToSave,
+            updated_at: new Date().toISOString()
+          });
+
+        if (error) throw error;
+        toast.success("Sincronizado com a Nuvem Supabase! ☁️");
+      } catch (e: any) {
+        console.error("Erro Supabase:", e);
+        toast.error("Erro ao salvar na nuvem: " + (e.message || "Tabela não encontrada"));
+      }
+    } else {
+      toast.info("Salvo apenas localmente (Supabase não configurado).");
+    }
+    
+    setLoading(false);
   };
 
   const loadRecord = (recordData: any) => {
