@@ -187,6 +187,38 @@ export const SerialManager = React.memo(() => {
     }
   };
 
+  const exportSerialsData = () => {
+    const dataToExport = {
+      batches: batches,
+    };
+    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AduanaPro_Serials_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    toast.success("Backup de seriais exportado!");
+  };
+
+  const importSerialsData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.batches) {
+          setBatches(data.batches);
+          localStorage.setItem('aduana_serials_backup', JSON.stringify(data.batches));
+          toast.success("Backup de seriais importado com sucesso!");
+        }
+      } catch (err) {
+        toast.error("Erro ao importar backup de seriais.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const exportSelectedPDF = () => {
     const selectedBatches = batches.filter(b => selectedIds.includes(b.id));
     if (selectedBatches.length === 0) return;
@@ -252,7 +284,16 @@ export const SerialManager = React.memo(() => {
                <p className="text-indigo-300/50 text-[9px] font-black uppercase tracking-[3px]">Histórico e Produção em Tempo Real</p>
             </div>
          </div>
-         <div className="flex gap-4 relative z-10">
+         <div className="flex items-center gap-4 relative z-10">
+            <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 mr-2">
+              <button onClick={exportSerialsData} className="px-4 py-2 text-white/60 rounded-xl text-[9px] font-black uppercase hover:bg-white/10 hover:text-white transition-all">
+                Exportar
+              </button>
+              <label className="px-4 py-2 text-white/60 rounded-xl text-[9px] font-black uppercase hover:bg-white/10 hover:text-white transition-all cursor-pointer">
+                Importar
+                <input type="file" className="hidden" accept=".json" onChange={importSerialsData} />
+              </label>
+            </div>
             {selectedIds.length > 0 && (
               <button onClick={exportSelectedPDF} className="px-8 py-4 bg-indigo-500 text-white rounded-[20px] font-black uppercase text-[10px] shadow-2xl hover:bg-indigo-400 transition-all flex items-center gap-3">
                 <FileDown size={18} /> Exportar Selecionados ({selectedIds.length})
