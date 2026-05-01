@@ -31,15 +31,16 @@ body {
 
 .font-mono-technical {
   font-family: 'JetBrains Mono', monospace !important;
-  letter-spacing: -0.05em !important;
+  letter-spacing: -0.02em !important;
 }
 
 .calculation-box {
   font-family: 'JetBrains Mono', monospace !important;
-  background: #f0fdf4;
-  border: 1px solid #dcfce7;
-  color: #166534;
-  padding: 1.5rem;
-  border-radius: 1.5rem;
-  line-height: 1.6;
+  background: #E8F5E9 !important; /* Verde pastel suave do print */
+  border: 1px solid #C8E6C9 !important;
+  color: #2E7D32 !important; /* Verde escuro técnico */
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  line-height: 1.5;
+  font-size: 0.85rem;
 }

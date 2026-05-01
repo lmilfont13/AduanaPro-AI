@@ -797,44 +797,42 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   const shareWhatsApp = () => {
     const pending = safeData.milestones.filter(m => !m.isPaid);
     
-    // Cálculo da Previsão de Embarque (Data do Pedido + Produção + Margem de 10 dias)
     const etdDate = (() => {
       try {
         const d = new Date(orderDate + 'T12:00:00');
-        if (isNaN(d.getTime())) return "A definir";
+        if (isNaN(d.getTime())) return "Não especificado";
         d.setDate(d.getDate() + (Number(productionDays) || 0) + 10);
         return d.toLocaleDateString('pt-BR');
-      } catch { return "A definir"; }
+      } catch { return "Não especificado"; }
     })();
 
     const cleanTag = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, '');
     const refTag = cleanTag(safeData.ciNumber) || "Naoespecificado";
 
-    let text = `💼 *SOLICITAÇÃO DE PAGAMENTO* - ${safeData.supplierName || "FORNECEDOR N/I"}\n\n` +
+    let text = `💼 SOLICITAÇÃO DE PAGAMENTO - ${safeData.supplierName || "FORNECEDOR N/I"}\n\n` +
                `${recipientName ? `${recipientName}, bom dia! 🏦 ` : "Bom dia! 🏦 "}gostaria de formalizar o pedido de lançamento de câmbio conforme abaixo:\n` +
                `Ref. Pedido: ${safeData.ciNumber || "Não especificado"} 📄\n` +
                `Containers: ${safeData.containerNumber || "Não especificado"}\n` +
                `Produto: ${safeData.productName || "Não especificado"}\n` +
                `*Previsão de Embarque: ${etdDate}* 🚢\n` +
                `----------------------------------\n` +
-               `*VALOR TOTAL DO CONTRATO: 💰 ${safeData.currency} ${safeData.contractTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${safeData.exchangeRate > 0 ? ` (R$ ${(safeData.contractTotal * safeData.exchangeRate).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})` : ""}*\n` +
+               `*VALOR TOTAL DO CONTRATO: 💰 ${safeData.currency} ${safeData.contractTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${safeData.exchangeRate > 0 ? ` (R$ ${(safeData.contractTotal * safeData.exchangeRate).toLocaleString('pt-BR', { minimumFractionDigits: 3 })})` : ""}*\n` +
                `TOTAL JÁ LIQUIDADO: ${safeData.currency} ${totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${((totalPaid/(safeData.contractTotal || 1))*100).toFixed(1)}%)\n` +
                `SALDO REMANESCENTE: ${safeData.currency} ${balanceDue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${((balanceDue/(safeData.contractTotal || 1))*100).toFixed(1)}%)\n\n`;
 
     if (safeData.milestones.length > 0) {
-      text += `*PARCELAS:*\n` +
+      text += `PARCELAS:\n` +
               safeData.milestones.map(m => {
                 const pct = ((m.amount / (safeData.contractTotal || 1)) * 100).toFixed(0);
-                const status = m.isPaid ? "✅ PAGO" : "⏳ A PAGAR";
                 const d = new Date(m.date + 'T12:00:00');
                 const formattedDate = isNaN(d.getTime()) ? m.date : d.toLocaleDateString('pt-BR');
-                return `• Vencimento: ${formattedDate} | Valor: ${safeData.currency} ${m.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${pct}%) | ${status}`;
+                return `• Vencimento: ${formattedDate} | Valor: ${safeData.currency} ${m.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${pct}%)`;
               }).join('\n') +
               `\n\n`;
     }
 
     if (bankDetails) {
-      text += `🏦 *DADOS BANCÁRIOS / OBSERVAÇÕES:*\n${bankDetails}\n\n`;
+      text += `🏦 DADOS BANCÁRIOS / OBSERVAÇÕES:\n${bankDetails}\n\n`;
     }
 
     text += `Fico no aguardo do comprovante de pagamento, obrigado! 🤝\n\n#Pagamento_${refTag}_`;
