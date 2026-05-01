@@ -38,6 +38,8 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   const [exchangeRate, setExchangeRate] = useState<number>(data?.exchangeRate || 0);
   const [orderDate, setOrderDate] = useState<string>(data?.orderDate || new Date().toISOString().split('T')[0]);
   const [productionDays, setProductionDays] = useState<number>(data?.productionDays || 30);
+  const [bankImage, setBankImage] = useState<string | null>(data?.bankImage || null);
+  const [productImage, setProductImage] = useState<string | null>(data?.productImage || null);
 
   // Busca taxa de câmbio automática
   useEffect(() => {
@@ -59,6 +61,8 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     if (data?.paymentTerms !== undefined) setPaymentTermsInput(data.paymentTerms);
     if (data?.recipientName !== undefined) setRecipientName(data.recipientName);
     if (data?.exchangeRate !== undefined) setExchangeRate(data.exchangeRate);
+    if (data?.bankImage !== undefined) setBankImage(data.bankImage);
+    if (data?.productImage !== undefined) setProductImage(data.productImage);
   }, [data]);
 
   const safeData = useMemo(() => ({
@@ -74,6 +78,8 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     currency: data?.currency || "USD",
     orderDate: data?.orderDate || orderDate,
     productionDays: Number(data?.productionDays || productionDays || 30),
+    bankImage: data?.bankImage || bankImage || null,
+    productImage: data?.productImage || productImage || null,
     milestones: Array.isArray(data?.milestones) ? data.milestones.map((m: any) => ({
       ...m,
       id: m.id || Math.random().toString(36).substring(2, 9),
@@ -217,11 +223,15 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       const pdfText = file.type === "application/pdf" ? await extractTextFromPDF(base64) : "";
       
       const prompt = `Extraia APENAS os dados bancários deste documento (Beneficiary, SWIFT, Account, Bank Name, Address). Retorne em formato de lista textual limpa. Texto extraído: ${pdfText}`;
-      const aiData = await callAI(prompt, base64);
       
-      const extractedText = typeof aiData === 'string' ? aiData : (aiData.bankDetails || JSON.stringify(aiData));
+      // Corrigindo callAI para usar o serviço Groq disponível
+      const aiData = await parsePaymentReceiptWithGroq(base64, file.type, pdfText);
+      
+      const extractedText = aiData.bankDetails || "Dados extraídos via IA...";
       setBankDetails(extractedText);
-      onUpdate({ ...safeData, bankDetails: extractedText });
+      const fullBase64 = `data:${file.type};base64,${base64}`;
+      setBankImage(fullBase64);
+      onUpdate({ ...safeData, bankDetails: extractedText, bankImage: fullBase64 });
       toast.success("Dados bancários extraídos!");
     } catch (e: any) {
       toast.error("Erro na extração bancária: " + e.message);
@@ -246,7 +256,16 @@ export default function SupplierPayments({ data, onUpdate }: any) {
           if (document.activeElement?.id === 'bank-details-area' || document.activeElement?.closest('[data-zone="bank"]')) {
              onDropBank([file]);
           } else {
-             onDrop([file]);
+             // Caso contrário, tenta ver se é foto do produto (se o foco estiver perto do nome do produto)
+             const reader = new FileReader();
+             reader.onload = (ev) => {
+               const base64 = ev.target?.result as string;
+               setProductImage(base64);
+               onUpdate({ ...safeData, productImage: base64 });
+               toast.success("Foto do produto adicionada!");
+             };
+             reader.readAsDataURL(file);
+             onDrop([file]); // Mantém a extração de texto da CI também
           }
           break;
         }
@@ -797,7 +816,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     <div className="max-w-6xl mx-auto p-6 space-y-6 relative">
       {showMsg && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in duration-200">
+          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in duration-200">
             <div className="p-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
               <div>
                 <h3 className="text-sm font-black text-slate-800 uppercase">Solicitação de Pagamento</h3>
@@ -805,22 +824,84 @@ export default function SupplierPayments({ data, onUpdate }: any) {
               </div>
               <button onClick={() => setShowMsg(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-all">×</button>
             </div>
-            <div className="p-8">
-              <textarea 
-                readOnly 
-                value={whatsappText} 
-                className="w-full h-64 p-6 bg-slate-900 text-emerald-400 font-mono text-xs rounded-2xl border-none outline-none resize-none shadow-inner"
-              />
-              <button 
-                onClick={() => {
-                  navigator.clipboard.writeText(whatsappText);
-                  toast.success("Mensagem copiada para a área de transferência!");
-                  setShowMsg(false);
-                }}
-                className="w-full mt-6 py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20"
-              >
-                Copiar Mensagem
-              </button>
+            <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+               <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mensagem de Texto</label>
+                  <textarea 
+                    readOnly 
+                    value={whatsappText} 
+                    className="w-full h-80 p-6 bg-slate-900 text-emerald-400 font-mono text-[10px] rounded-2xl border-none outline-none resize-none shadow-inner"
+                  />
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(whatsappText);
+                      toast.success("Mensagem copiada!");
+                    }}
+                    className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-2"
+                  >
+                    <FileText size={16} /> Copiar Mensagem
+                  </button>
+               </div>
+
+               <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Anexos (Produto / Banco)</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="h-80 bg-slate-100 rounded-2xl overflow-hidden border-2 border-dashed border-slate-200 flex flex-col items-center justify-center relative group">
+                      {productImage ? (
+                        <>
+                          <img src={productImage} alt="Prod" className="w-full h-full object-contain" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                             <span className="text-[8px] font-black text-white uppercase">Produto</span>
+                          </div>
+                        </>
+                      ) : (
+                         <span className="text-[8px] font-black text-slate-300 uppercase">Sem Foto Produto</span>
+                      )}
+                      <button 
+                        disabled={!productImage}
+                        onClick={async () => {
+                          if (!productImage) return;
+                          const res = await fetch(productImage);
+                          const blob = await res.blob();
+                          await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+                          toast.success("Foto do Produto copiada!");
+                        }}
+                        className="absolute bottom-4 left-4 right-4 py-2 bg-slate-900/80 text-white rounded-xl font-black uppercase text-[8px] backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        Copiar Produto
+                      </button>
+                    </div>
+
+                    <div className="h-80 bg-slate-100 rounded-2xl overflow-hidden border-2 border-dashed border-slate-200 flex flex-col items-center justify-center relative group">
+                      {bankImage ? (
+                        <>
+                          <img src={bankImage} alt="Bank" className="w-full h-full object-contain" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                             <span className="text-[8px] font-black text-white uppercase">Dados Bancários</span>
+                          </div>
+                        </>
+                      ) : (
+                         <span className="text-[8px] font-black text-slate-300 uppercase">Sem Foto Banco</span>
+                      )}
+                      <button 
+                        disabled={!bankImage}
+                        onClick={async () => {
+                          if (!bankImage) return;
+                          const res = await fetch(bankImage);
+                          const blob = await res.blob();
+                          await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+                          toast.success("Dados Bancários copiados!");
+                        }}
+                        className="absolute bottom-4 left-4 right-4 py-2 bg-slate-900/80 text-white rounded-xl font-black uppercase text-[8px] backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        Copiar Banco
+                      </button>
+                    </div>
+                  </div>
+               </div>
+            </div>
+            <div className="p-6 bg-slate-50 text-center border-t border-slate-100">
+               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Dica: Cole o texto no WhatsApp e depois cole a imagem (Ctrl+V)</p>
             </div>
           </div>
         </div>
@@ -832,7 +913,12 @@ export default function SupplierPayments({ data, onUpdate }: any) {
              <DollarSign size={24} />
           </div>
           <div>
-            <h1 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Fluxo de Pagamentos <span className="text-[10px] text-orange-500 ml-2">v1.2 UPDATED</span></h1>
+            <h1 className="text-xl font-black text-slate-800 uppercase tracking-tighter flex items-center gap-2">
+               Fluxo de Pagamentos 
+               <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-md text-[7px] font-black uppercase flex items-center gap-1">
+                  <div className="w-1 h-1 bg-orange-500 rounded-full animate-pulse"></div> v2.1 LATEST
+               </span>
+            </h1>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Controle de Pedido e Parcelas</p>
           </div>
         </div>
@@ -866,14 +952,48 @@ export default function SupplierPayments({ data, onUpdate }: any) {
 
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12 lg:col-span-4 space-y-6">
-          <div {...getRootProps()} className="p-10 border-2 border-dashed border-slate-200 rounded-[32px] bg-white hover:border-orange-500 hover:bg-orange-50/10 transition-all text-center cursor-pointer group">
-            <input {...getInputProps()} />
-            <Upload size={32} className="mx-auto text-slate-200 group-hover:text-orange-500 mb-4" />
-            <p className="text-xs font-black uppercase text-slate-400 tracking-widest">Arraste a CI ou Cole (Ctrl+V)</p>
-            {loading && <div className="mt-4 text-orange-600 text-xs font-black animate-pulse uppercase">Processando IA...</div>}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* CI Dropzone */}
+            <div {...getRootProps()} className="p-8 border-2 border-dashed border-slate-200 rounded-[32px] bg-white hover:border-orange-500 hover:bg-orange-50/10 transition-all text-center cursor-pointer group flex flex-col items-center justify-center">
+              <input {...getInputProps()} />
+              <Upload size={24} className="text-slate-200 group-hover:text-orange-500 mb-2" />
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Arraste a CI</p>
+              {loading && <div className="mt-2 text-orange-600 text-[8px] font-black animate-pulse uppercase">IA...</div>}
+            </div>
+
+            {/* Foto do Produto */}
+            <div className="p-4 bg-slate-900 rounded-[32px] space-y-2 border-2 border-orange-500/50 shadow-lg shadow-orange-500/10">
+               <label className="text-[8px] font-black text-slate-500 uppercase tracking-[2px] block mb-1">Foto do Produto</label>
+               <div className="h-32 bg-white/5 rounded-2xl border-2 border-dashed border-white/10 flex items-center justify-center relative overflow-hidden group cursor-pointer hover:border-orange-500 hover:bg-white/10 transition-all">
+                  {productImage ? (
+                    <>
+                      <img src={productImage} alt="Produto" className="w-full h-full object-contain" />
+                      <button onClick={() => setProductImage(null)} className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={12} /></button>
+                    </>
+                  ) : (
+                    <label className="w-full h-full flex flex-col items-center justify-center gap-1 cursor-pointer">
+                      <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const base64 = ev.target?.result as string;
+                            setProductImage(base64);
+                            onUpdate({ ...safeData, productImage: base64 });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }} />
+                      <Plus size={24} className="text-orange-500" />
+                      <span className="text-[8px] font-black text-white/40 uppercase">Colar Foto</span>
+                    </label>
+                  )}
+               </div>
+            </div>
           </div>
 
           <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-4">
+
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fornecedor</label>
               <input type="text" value={safeData.supplierName} onChange={(e) => onUpdate({...safeData, supplierName: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:ring-2 ring-orange-500/20" placeholder="Nome do Fornecedor" />
@@ -891,6 +1011,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produto (Extraído e Traduzido)</label>
               <input type="text" value={safeData.productName} onChange={(e) => { setProductName(e.target.value); onUpdate({...safeData, productName: e.target.value}); }} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:ring-2 ring-orange-500/20" placeholder="Descrição do Produto" />
+              
             </div>
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
               <div className="space-y-1">
@@ -903,7 +1024,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
                     const rawVal = e.target.value.replace(/\./g, '').replace(',', '.').replace(/[^0-9.]/g, '');
                     onUpdate({...safeData, contractTotal: parseFloat(rawVal) || 0});
                   }}
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xl font-black outline-none focus:ring-2 ring-blue-500/20" 
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xl font-black outline-none focus:ring-2 ring-blue-500/20 font-mono-technical" 
                 />
               </div>
               <div className="space-y-1">
@@ -917,7 +1038,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
                     setExchangeRate(rate);
                     onUpdate({...safeData, exchangeRate: rate});
                   }}
-                  className="w-full p-4 bg-orange-50 border border-orange-100 rounded-2xl text-xl font-black text-orange-700 outline-none focus:ring-2 ring-orange-500/20" 
+                  className="w-full p-4 bg-orange-50 border border-orange-100 rounded-2xl text-xl font-black text-orange-700 outline-none focus:ring-2 ring-orange-500/20 font-mono-technical" 
                 />
               </div>
             </div>
@@ -952,7 +1073,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             {safeData.exchangeRate > 0 && (
               <div className="p-4 bg-slate-900 rounded-2xl flex justify-between items-center text-white">
                 <span className="text-[10px] font-black uppercase opacity-60">Total em Reais (Estimado)</span>
-                <span className="text-lg font-black text-orange-400">R$ {(safeData.contractTotal * safeData.exchangeRate).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                <span className="text-lg font-black text-orange-400 font-mono-technical">R$ {(safeData.contractTotal * safeData.exchangeRate).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
               </div>
             )}
             <div className="space-y-1">
@@ -1022,13 +1143,35 @@ export default function SupplierPayments({ data, onUpdate }: any) {
               </div>
             </div>
 
-            <div className="p-4 bg-emerald-50 rounded-2xl flex justify-between items-center">
-              <span className="text-[10px] font-black text-emerald-600 uppercase">Total Pago</span>
-              <span className="text-lg font-black text-emerald-700">{safeData.currency} {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="p-4 bg-rose-50 rounded-2xl flex justify-between items-center">
-              <span className="text-[10px] font-black text-rose-600 uppercase">A Pagar</span>
-              <span className="text-lg font-black text-rose-700">{safeData.currency} {balanceDue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+            {/* Quadro de Auditoria Estilo Modelo */}
+            <div className="calculation-box shadow-xl border-emerald-200/50">
+               <div className="flex justify-between items-center mb-6 border-b border-emerald-200 pb-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-800">Cálculo de Auditoria Financeira</span>
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+               </div>
+               
+               <div className="space-y-4 font-mono-technical text-sm">
+                  <div className="flex flex-col">
+                     <span className="text-[9px] text-emerald-600/70 font-bold uppercase mb-1">Base de Cálculo (Total Contrato)</span>
+                     <div className="bg-emerald-100/30 p-3 rounded-xl border border-emerald-100">
+                        {safeData.currency} {safeData.contractTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                     </div>
+                  </div>
+
+                  <div className="flex flex-col">
+                     <span className="text-[9px] text-emerald-600/70 font-bold uppercase mb-1">Total Liquidado (Pago)</span>
+                     <div className="bg-emerald-100/30 p-3 rounded-xl border border-emerald-100 text-emerald-700">
+                        - {safeData.currency} {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                     </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-emerald-200 mt-4">
+                     <span className="text-[9px] text-rose-600 font-bold uppercase mb-1 block">Saldo a Pagar (Balance Due)</span>
+                     <div className="text-2xl font-black text-rose-700 tracking-tighter">
+                        {safeData.currency} {balanceDue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                     </div>
+                  </div>
+               </div>
             </div>
           </div>
         </div>
@@ -1060,10 +1203,10 @@ export default function SupplierPayments({ data, onUpdate }: any) {
                       <input value={m.description} onChange={(e) => updateMilestone(m.id, { description: e.target.value })} className="bg-transparent text-xs font-medium text-slate-600 outline-none w-full" />
                     </td>
                     <td className="p-5 text-right">
-                      <div className="font-black text-slate-800 text-xs">
+                      <div className="font-black text-slate-800 text-xs font-mono-technical">
                         $ {m.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </div>
-                      <div className="text-[10px] font-bold text-slate-400 mt-1">
+                      <div className="text-[10px] font-bold text-slate-400 mt-1 font-mono-technical">
                         {safeData.contractTotal > 0 ? ((m.amount / safeData.contractTotal) * 100).toFixed(1) : 0}%
                       </div>
                     </td>

@@ -3,8 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase URL or Anon Key is missing in .env');
+export const IS_SUPABASE_CONFIGURED = !!supabaseUrl && !!supabaseAnonKey && !supabaseUrl.includes("placeholder");
+
+if (!IS_SUPABASE_CONFIGURED) {
+  console.warn('Supabase não está configurado. Usando modo offline/placeholder.');
 }
 
 export const supabase = createClient(

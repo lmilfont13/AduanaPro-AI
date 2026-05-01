@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   FileDown,
   Rocket,
-  Truck
+  Truck,
+  RefreshCw
 } from 'lucide-react';
 
 // Importando serviços e tipos
@@ -147,6 +148,7 @@ const FeatureCard = ({ title, desc, icon, onClick }: any) => (
 );
 
 export default function AduanaDashboard() {
+  const [view, setView] = useState<'desktop' | 'app'>('desktop');
   const [activeTab, setActiveTab] = useState("dashboard");
   const [paymentData, setPaymentData] = useState<SupplierPaymentData>({
     supplierName: "", orderNumber: "", contractTotal: 0, currency: "USD", milestones: []
@@ -176,18 +178,19 @@ export default function AduanaDashboard() {
         case 'li': return <LIGenerator aiEngine="groq" blData={blData} ciData={ciData} plData={plData} />;
         case 'comparativo': return <FreightBookingRequest />;
         case 'analise-frete': return <FreightComparison engine="groq" />;
-        case 'hub': return <ProjectHub />;
         case 'expedicao': return <ArrivalSchedule />;
         default: return (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-            <FeatureCard title="Auditoria Docs" desc="Cruzamento BL, CI e PL." icon={<FileText size={32} />} onClick={() => setActiveTab('auditoria')} />
-            <FeatureCard title="Comparativo Frete" desc="Solicitação e Análise." icon={<Ship size={32} />} onClick={() => setActiveTab('comparativo')} />
-            <FeatureCard title="Gerador de LI" desc="Rascunho Siscomex IA." icon={<FileDown size={32} />} onClick={() => setActiveTab('li')} />
-            <FeatureCard title="Gestão Financeira" desc="Controle de pagamentos." icon={<DollarSign size={32} />} onClick={() => setActiveTab('payments')} />
-            <FeatureCard title="Gerador Seriais" desc="Produção Cloud." icon={<Hash size={32} />} onClick={() => setActiveTab('seriais')} />
-            <FeatureCard title="Aduana Chat" desc="Consultoria IA." icon={<Bot size={32} />} onClick={() => setActiveTab('chat')} />
-            <FeatureCard title="Homologação" desc="Match de Fornecedores." icon={<ShieldCheck size={32} />} onClick={() => setActiveTab('homologacao')} />
-            <FeatureCard title="Expedição" desc="Arrival Schedule." icon={<Truck size={32} />} onClick={() => setActiveTab('expedicao')} />
+          <div className="relative h-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+              <FeatureCard title="Auditoria Docs" desc="Cruzamento BL, CI e PL." icon={<FileText size={32} />} onClick={() => setActiveTab('auditoria')} />
+              <FeatureCard title="Comparativo Frete" desc="Solicitação e Análise." icon={<Ship size={32} />} onClick={() => setActiveTab('comparativo')} />
+              <FeatureCard title="Gerador de LI" desc="Rascunho Siscomex IA." icon={<FileDown size={32} />} onClick={() => setActiveTab('li')} />
+              <FeatureCard title="Gestão Financeira" desc="Controle de pagamentos." icon={<DollarSign size={32} />} onClick={() => setActiveTab('payments')} />
+              <FeatureCard title="Gerador Seriais" desc="Produção Cloud." icon={<Hash size={32} />} onClick={() => setActiveTab('seriais')} />
+              <FeatureCard title="Aduana Chat" desc="Consultoria IA." icon={<Bot size={32} />} onClick={() => setActiveTab('chat')} />
+              <FeatureCard title="Homologação" desc="Match de Fornecedores." icon={<ShieldCheck size={32} />} onClick={() => setActiveTab('homologacao')} />
+              <FeatureCard title="Expedição" desc="Arrival Schedule." icon={<Truck size={32} />} onClick={() => setActiveTab('expedicao')} />
+            </div>
           </div>
         );
       }
@@ -205,20 +208,86 @@ export default function AduanaDashboard() {
     }
   };
 
+  if (view === 'desktop') {
+    return (
+      <div className="min-h-screen bg-slate-950 relative overflow-hidden flex flex-col font-sans">
+        {/* Wallpaper Aesthetic */}
+        <div className="absolute inset-0 z-0 opacity-40">
+           <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-600 blur-[150px] rounded-full" />
+           <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-orange-600 blur-[150px] rounded-full" />
+        </div>
+
+        {/* Desktop Grid */}
+        <div className="relative z-10 flex-1 p-10 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 grid-rows-6 gap-6">
+           {/* Atalho Principal */}
+           <div 
+             onClick={() => setView('app')}
+             className="flex flex-col items-center gap-3 p-6 rounded-[32px] hover:bg-white/10 transition-all cursor-pointer group w-fit h-fit"
+           >
+              <div className="w-20 h-20 bg-white rounded-[24px] shadow-2xl flex items-center justify-center text-orange-500 group-hover:scale-110 group-active:scale-95 transition-all">
+                 <Rocket size={40} />
+              </div>
+              <span className="text-[10px] font-black text-white uppercase tracking-widest bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm group-hover:bg-orange-500 transition-all">AduanaPro AI</span>
+           </div>
+
+           {/* Outros Atalhos (Placeholders para o Hub) */}
+           <div className="flex flex-col items-center gap-3 p-6 rounded-[32px] opacity-40 hover:opacity-100 hover:bg-white/10 transition-all cursor-pointer group w-fit h-fit">
+              <div className="w-20 h-20 bg-slate-800 rounded-[24px] flex items-center justify-center text-slate-500">
+                 <LayoutDashboard size={40} />
+              </div>
+              <span className="text-[10px] font-black text-white uppercase tracking-widest">Mamoeiro BI</span>
+           </div>
+
+           <div className="flex flex-col items-center gap-3 p-6 rounded-[32px] opacity-40 hover:opacity-100 hover:bg-white/10 transition-all cursor-pointer group w-fit h-fit">
+              <div className="w-20 h-20 bg-slate-800 rounded-[24px] flex items-center justify-center text-slate-500">
+                 <Bot size={40} />
+              </div>
+              <span className="text-[10px] font-black text-white uppercase tracking-widest">IA Lab</span>
+           </div>
+        </div>
+
+        {/* Taskbar bottom */}
+        <div className="relative z-20 h-16 bg-black/60 backdrop-blur-2xl border-t border-white/10 flex items-center justify-between px-10">
+           <div className="flex items-center gap-6">
+              <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-orange-500/20">M</div>
+              <div className="flex gap-2">
+                 <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white"><FileText size={16} /></div>
+                 <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white"><Ship size={16} /></div>
+              </div>
+           </div>
+           <div className="flex items-center gap-6 text-white/60 font-black text-[9px] uppercase tracking-widest">
+              <span className="text-orange-500 font-black px-2 py-0.5 bg-orange-500/10 rounded-md">v2.1-LATEST</span>
+              <span>{new Date().toLocaleDateString('pt-BR')}</span>
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+              <span>Online</span>
+           </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#F8F9FC] flex overflow-hidden font-sans">
+    <div className="min-h-screen bg-[#F8F9FC] flex overflow-hidden font-sans animate-in zoom-in-95 duration-500">
       <aside className="w-80 bg-[#0F172A] flex flex-col h-screen shrink-0 shadow-2xl relative z-20">
-        <div className="p-10 flex items-center gap-5 border-b border-white/5 bg-white/5">
-          <div className="w-12 h-12 bg-[#f97316] rounded-2xl flex items-center justify-center text-white font-black text-xl">M</div>
-          <div className="flex flex-col">
-            <span className="font-black text-xl text-white uppercase leading-none">Mamoeiro</span>
-            <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest mt-2">Intelligence</span>
+        <div className="p-10 flex items-center justify-between border-b border-white/5 bg-white/5">
+          <div className="flex items-center gap-5">
+            <div className="w-12 h-12 bg-[#f97316] rounded-2xl flex items-center justify-center text-white font-black text-xl">M</div>
+            <div className="flex flex-col">
+              <span className="font-black text-xl text-white uppercase leading-none">Mamoeiro</span>
+              <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest mt-2">Intelligence</span>
+            </div>
           </div>
+          <button 
+            onClick={() => setView('desktop')}
+            className="w-10 h-10 rounded-xl bg-white/5 text-white/40 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center"
+            title="Voltar para Área de Trabalho"
+          >
+            <LayoutDashboard size={18} />
+          </button>
         </div>
         <nav className="flex-1 px-6 py-10 space-y-2 overflow-y-auto custom-scrollbar">
           {[
             { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-            { id: 'hub', label: 'Meus Projetos', icon: <Rocket size={20} className="text-orange-400" /> },
             { id: 'auditoria', label: 'Auditoria Docs', icon: <FileText size={20} /> },
             { id: 'comparativo', label: 'Solicitação Frete', icon: <Ship size={20} /> },
             { id: 'analise-frete', label: 'Comparativo Propostas', icon: <ArrowRightLeft size={20} /> },
@@ -239,7 +308,17 @@ export default function AduanaDashboard() {
               <span>{item.label}</span>
             </button>
           ))}
-        </nav>
+        <div className="p-8 border-t border-white/5 bg-white/5">
+           <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center text-indigo-400">
+                 <RefreshCw size={14} className="animate-spin-slow" />
+              </div>
+              <div className="flex flex-col">
+                 <span className="text-[7px] font-black text-white/40 uppercase tracking-[2px]">Deploy Estável</span>
+                 <span className="text-[9px] font-black text-white uppercase tracking-tighter">v2.1-MAY-01-21:40</span>
+              </div>
+           </div>
+        </div>
       </aside>
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="h-24 bg-white/80 backdrop-blur-xl border-b border-slate-200 flex items-center justify-between px-12 shrink-0">

@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -27,3 +28,18 @@ body {
 .custom-scrollbar::-webkit-scrollbar { width: 5px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
+
+.font-mono-technical {
+  font-family: 'JetBrains Mono', monospace !important;
+  letter-spacing: -0.05em !important;
+}
+
+.calculation-box {
+  font-family: 'JetBrains Mono', monospace !important;
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  color: #166534;
+  padding: 1.5rem;
+  border-radius: 1.5rem;
+  line-height: 1.6;
+}
