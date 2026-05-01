@@ -308,6 +308,7 @@ export default function AduanaDashboard() {
               <span>{item.label}</span>
             </button>
           ))}
+        </nav>
         <div className="p-8 border-t border-white/5 bg-white/5">
            <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center text-indigo-400">
