@@ -246,7 +246,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     return history.filter(h => selectedIds.includes(h.id)).map(r => {
       const ms = r.data?.milestones || [];
       const pendings = ms.filter((m: any) => !m.isPaid).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      return pendings.length > 0 ? { ...pendings[0], supplier: r.data?.supplierName, ref: r.data?.ciNumber, parentTotal: r.data?.contractTotal } : null;
+      return pendings.length > 0 ? { ...pendings[0], supplier: r.data?.supplierName, ref: r.data?.ciNumber, parentTotal: r.data?.contractTotal, productImage: r.data?.productImage } : null;
     }).filter(Boolean).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [selectedIds, history]);
 
@@ -863,8 +863,27 @@ export default function SupplierPayments({ data, onUpdate }: any) {
           <div className="p-8 bg-slate-900 rounded-[40px] shadow-2xl text-white relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
             <div className="flex justify-between items-center mb-6 relative z-10"><h3 className="text-[11px] font-black text-emerald-400 uppercase flex items-center gap-2"><TrendingUp size={18} /> Próximo Passo</h3>{nextPayments.length > 0 && (<button onClick={exportNextPDF} className="w-10 h-10 bg-emerald-500 text-white rounded-xl flex items-center justify-center shadow-lg hover:bg-emerald-600 transition-all"><Download size={18}/></button>)}</div>
-            <div className="space-y-6 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar relative z-10">
-              {nextPayments.map((p: any, idx) => (<div key={idx} className="p-5 bg-slate-800/50 rounded-3xl border border-slate-700/50 relative group"><div className="flex justify-between items-start mb-2"><span className="text-[9px] font-black text-emerald-400 uppercase">{p.ref}</span><span className="text-[10px] font-black font-mono text-slate-400">{new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span></div><p className="text-[10px] font-bold text-slate-300 truncate mb-1">{p.supplier}</p><div className="flex justify-between items-center pt-3 border-t border-slate-700/50"><div className="flex flex-col"><p className="text-xl font-black text-white">$ {Number(p.amount||0).toLocaleString('pt-BR')}</p><span className="text-[9px] font-black text-slate-400 uppercase">{p.description}</span></div><button onClick={() => sendWhatsapp(p)} className="w-10 h-10 bg-emerald-500/20 text-emerald-400 rounded-xl flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all shadow-inner"><MessageSquare size={18}/></button></div></div>))}
+            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar relative z-10">
+              {nextPayments.map((p: any, idx) => (
+                <div key={idx} className="p-3 bg-slate-800/50 rounded-2xl border border-slate-700/50 flex items-center gap-4 group hover:bg-slate-800 transition-all">
+                  {p.productImage ? (
+                    <img src={p.productImage} className="w-14 h-14 rounded-xl object-cover bg-white/5 shrink-0" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-white/5 flex items-center justify-center shrink-0 text-slate-600">
+                       <ImageIcon size={20} />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-center mb-0.5">
+                      <span className="text-[9px] font-black text-emerald-400 uppercase truncate pr-2">{p.ref}</span>
+                      <span className="text-[9px] font-black font-mono text-slate-400 shrink-0">{new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                    </div>
+                    <p className="text-[14px] font-black text-white truncate mb-0.5">$ {Number(p.amount||0).toLocaleString('pt-BR')}</p>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase truncate">{p.supplier}</p>
+                  </div>
+                  <button onClick={() => sendWhatsapp(p)} className="w-10 h-10 shrink-0 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center opacity-80 group-hover:opacity-100 group-hover:bg-emerald-500 group-hover:text-white transition-all"><MessageSquare size={16}/></button>
+                </div>
+              ))}
               {selectedIds.length === 0 && <div className="text-center py-12 opacity-30"><AlertCircle className="mx-auto mb-2" size={32} /><p className="text-[9px] font-black uppercase">Marque no histórico</p></div>}
             </div>
             <div className="mt-8 pt-6 border-t border-slate-800 relative z-10"><p className="text-[9px] text-slate-500 uppercase mb-1">Total Imediato</p><p className="text-3xl font-black text-emerald-400 font-mono tracking-tighter">$ {nextPayments.reduce((acc, p: any) => acc + Number(p.amount || 0), 0).toLocaleString('pt-BR')}</p></div>
