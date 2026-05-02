@@ -105,17 +105,30 @@ export default function SupplierPayments({ data, onUpdate }: any) {
 
   useEffect(() => {
     const fetchHistory = async () => {
+      let localData: any[] = [];
+      try {
+        const saved = localStorage.getItem('ADUANAPRO_PAYMENTS_HISTORY');
+        if (saved) localData = JSON.parse(saved);
+      } catch (e) {}
+
       if (typeof supabase !== 'undefined') {
         const { data, error } = await supabase.from('supplier_payments').select('*').order('created_at', { ascending: false });
         if (!error && data) {
-          setHistory(data.map(r => ({ id: r.id, data: r.data })));
-          return;
+          if (data.length === 0 && localData.length > 0) {
+            // Migrar do localStorage para o Supabase
+            setHistory(localData);
+            const rowsToInsert = localData.map(h => ({ id: h.id, data: h.data }));
+            supabase.from('supplier_payments').upsert(rowsToInsert).then();
+            return;
+          }
+          if (data.length > 0) {
+            setHistory(data.map(r => ({ id: r.id, data: r.data })));
+            return;
+          }
         }
       }
-      try {
-        const saved = localStorage.getItem('ADUANAPRO_PAYMENTS_HISTORY');
-        if (saved) setHistory(JSON.parse(saved));
-      } catch (e) {}
+      
+      if (localData.length > 0) setHistory(localData);
     };
     fetchHistory();
   }, []);
