@@ -197,14 +197,20 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     const ph = doc.internal.pageSize.height;
     let y = 15;
 
-    // Cabeçalho Principal
+    // Cabeçalho Principal com Proporção Automática
     if (companyLogo) {
-      try { doc.addImage(companyLogo, 'PNG', 15, y, 30, 15); } catch(e){}
+      try { 
+        const imgProps = doc.getImageProperties(companyLogo);
+        const logoHeight = 15;
+        const logoWidth = (imgProps.width * logoHeight) / imgProps.height;
+        doc.addImage(companyLogo, 'PNG', 15, y, logoWidth, logoHeight); 
+      } catch(e){}
     }
     
     doc.setFontSize(16);
     doc.setTextColor(15, 23, 42);
     doc.setFont("helvetica", "bold");
+    // Alinhamento vertical ajustado (y + 10 para y + 9.5 para centralizar com a logo de 15mm)
     doc.text("RELATÓRIO CONSOLIDADO DE STATUS", pw - 15, y + 10, { align: 'right' });
     y += 25;
 
