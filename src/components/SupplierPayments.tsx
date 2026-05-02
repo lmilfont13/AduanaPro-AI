@@ -238,25 +238,30 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       doc.setFontSize(11);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(15, 23, 42);
-      doc.text(f.supplierName?.toUpperCase() || "FORNECEDOR N/I", 45, y + 4);
+      // Nome do fornecedor alinhado ao topo da imagem (y) e mais próximo (38)
+      doc.text(f.supplierName?.toUpperCase() || "FORNECEDOR N/I", 38, y + 3);
       
       doc.setFontSize(8);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(100);
-      doc.text(`CI: ${f.ciNumber || "N/E"} | CTN: ${f.containerNumber || "N/E"}`, 45, y + 9);
+      doc.text(`CI: ${f.ciNumber || "N/E"} | CTN: ${f.containerNumber || "N/E"}`, 38, y + 8);
       
       const totalPaid = (f.milestones || []).filter((m: any) => m.isPaid).reduce((acc: number, cur: any) => acc + Number(cur.amount), 0);
       const totalPending = Number(f.contractTotal || 0) - totalPaid;
       
       doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      // Distribuição financeira alinhada com a estrutura da página
       doc.setTextColor(15, 23, 42);
-      doc.text(`TOTAL: $ ${Number(f.contractTotal || 0).toLocaleString('en-US')}`, 45, y + 15);
+      doc.text(`TOTAL: $ ${Number(f.contractTotal || 0).toLocaleString('en-US')}`, 38, y + 14);
+      
       doc.setTextColor(16, 185, 129);
-      doc.text(`PAGO: $ ${totalPaid.toLocaleString('en-US')}`, 85, y + 15);
+      doc.text(`PAGO: $ ${totalPaid.toLocaleString('en-US')}`, pw / 2, y + 14, { align: 'center' });
+      
       doc.setTextColor(244, 63, 94);
-      doc.text(`SALDO: $ ${totalPending.toLocaleString('en-US')}`, 120, y + 15);
+      doc.text(`SALDO: $ ${totalPending.toLocaleString('en-US')}`, pw - 15, y + 14, { align: 'right' });
 
-      y += 20;
+      y += 18;
 
       const tableData = (f.milestones || []).map((m: any) => [
         new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR'),
