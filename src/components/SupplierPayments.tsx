@@ -38,7 +38,8 @@ import {
   Square,
   Eraser,
   Globe2,
-  FileCheck
+  FileCheck,
+  PenTool
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -62,6 +63,11 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   const [whatsappText, setWhatsappText] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   
+  // LOGO GLOBAL DA EMPRESA
+  const [companyLogo, setCompanyLogo] = useState<string | null>(() => {
+    return localStorage.getItem('ADUANAPRO_COMPANY_LOGO');
+  });
+
   const getTodayLocal = () => {
     const d = new Date();
     const offset = d.getTimezoneOffset();
@@ -162,28 +168,28 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     toast.success("Excluído.");
   };
 
-  const clearAllHistory = () => {
-    if (window.confirm("Apagar histórico global?")) {
-      setHistory([]); localStorage.removeItem('ADUANAPRO_PAYMENTS_HISTORY'); setSelectedIds([]); toast.success("Reset!");
-    }
-  };
+  const clearAllHistory = () => { if (window.confirm("Zerar Histórico?")) { setHistory([]); localStorage.removeItem('ADUANAPRO_PAYMENTS_HISTORY'); setSelectedIds([]); toast.success("Reset OK!"); } };
 
   const exportSupplierPDF = () => {
     const doc = new jsPDF() as any;
     const pageWidth = doc.internal.pageSize.width;
     const margin = 20;
 
-    // LOGO SIMULADO
-    doc.setFillColor(249, 115, 22); doc.circle(pageWidth/2, 25, 10, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.text("m", pageWidth/2 - 2, 27);
+    // LOGO DA EMPRESA (SUBSTITUI O 'm')
+    if (companyLogo) {
+      try { doc.addImage(companyLogo, 'PNG', pageWidth/2 - 15, 10, 30, 20); } catch (e) {
+        doc.setFillColor(15, 23, 42); doc.circle(pageWidth/2, 25, 10, 'F');
+      }
+    } else {
+      doc.setFillColor(249, 115, 22); doc.circle(pageWidth/2, 25, 10, 'F');
+      doc.setTextColor(255, 255, 255); doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.text("A", pageWidth/2 - 2, 27);
+    }
 
-    // HEADER
     doc.setTextColor(15, 23, 42); doc.setFontSize(24); doc.setFont(undefined, 'bold');
     doc.text("Payment Status Report", pageWidth/2, 45, { align: 'center' });
     doc.setTextColor(249, 115, 22); doc.setFontSize(10); doc.text("OFFICIAL ORDER VERIFICATION", pageWidth/2, 52, { align: 'center' });
     doc.setDrawColor(226, 232, 240); doc.line(margin, 60, pageWidth - margin, 60);
 
-    // SUPPLIER & TOTAL
     doc.setTextColor(15, 23, 42); doc.setFontSize(12); doc.setFont(undefined, 'bold');
     doc.text(form.supplierName.toUpperCase(), margin, 75);
     doc.setTextColor(148, 163, 184); doc.setFontSize(8); doc.setFont(undefined, 'normal');
@@ -197,7 +203,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     const paidPct = (totalPaid / (form.contractTotal || 1) * 100).toFixed(1);
     const balPct = (balance / (form.contractTotal || 1) * 100).toFixed(1);
 
-    // BOX GREEN
+    // BOXES
     doc.setFillColor(240, 253, 244); doc.rect(margin, 100, 80, 50, 'F');
     doc.setTextColor(22, 101, 52); doc.setFontSize(8); doc.text("PAID AMOUNT", margin + 10, 112);
     doc.text(`${paidPct}%`, margin + 70, 112, { align: 'right' });
@@ -205,7 +211,6 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     doc.setFillColor(187, 247, 208); doc.rect(margin + 10, 138, 60, 4, 'F');
     doc.setFillColor(34, 197, 94); doc.rect(margin + 10, 138, (Number(paidPct)/100)*60, 4, 'F');
 
-    // BOX RED
     doc.setFillColor(254, 242, 242); doc.rect(pageWidth - margin - 80, 100, 80, 50, 'F');
     doc.setTextColor(153, 27, 27); doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.text("REMAINING BALANCE", pageWidth - margin - 70, 112);
     doc.text(`${balPct}%`, pageWidth - margin - 10, 112, { align: 'right' });
@@ -213,7 +218,6 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     doc.setFillColor(254, 202, 202); doc.rect(pageWidth - margin - 70, 138, 60, 4, 'F');
     doc.setFillColor(239, 68, 68); doc.rect(pageWidth - margin - 70, 138, (Number(balPct)/100)*60, 4, 'F');
 
-    // TABLE
     doc.setTextColor(148, 163, 184); doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.text("PAYMENT LEDGER", margin, 170);
     const tableData = form.milestones.map(m => [
       { content: `${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US')}\n${m.isPaid ? 'CONFIRMED PAID' : 'PENDING LIQUIDATION'}`, styles: { textColor: m.isPaid ? [22, 101, 52] : [148, 163, 184], fontSize: 7 } },
@@ -224,6 +228,21 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     autoTable(doc, { startY: 175, head: [['DATE', 'PHASE', 'SHARE', 'USD VALUE']], body: tableData, theme: 'plain', headStyles: { textColor: [148, 163, 184], fontSize: 8 }, styles: { fontSize: 9 }, columnStyles: { 3: { halign: 'right', fontStyle: 'bold' } } });
     doc.save(`Verification_${form.ciNumber}.pdf`);
   };
+
+  const onDropCompanyLogo = useCallback((f: File[]) => { 
+    const r = new FileReader(); 
+    r.onload = () => { 
+      const b64 = r.result as string;
+      setCompanyLogo(b64);
+      localStorage.setItem('ADUANAPRO_COMPANY_LOGO', b64);
+      toast.success("Logo da Empresa Atualizada!");
+    }; 
+    r.readAsDataURL(f[0]); 
+  }, []);
+
+  const { getRootProps: gLogo, getInputProps: iLogo } = useDropzone({ onDrop: onDropCompanyLogo, accept: {'image/*': []}, multiple: false });
+  const { getRootProps: gProd, getInputProps: iProd } = useDropzone({ onDrop: (f) => { const r = new FileReader(); r.onload = () => setForm(p => ({ ...p, productImage: r.result as string })); r.readAsDataURL(f[0]); }, accept: {'image/*': []}, multiple: false });
+  const { getRootProps: gBank, getInputProps: iBank } = useDropzone({ onDrop: async (f) => { const r = new FileReader(); r.onload = async () => { const b = r.result as string; setForm(p => ({ ...p, bankImage: b })); setLoading(true); try { const t = await extractTextFromPDF(f[0]); const ex = await parsePaymentReceiptWithGroq(b, f[0].type, t); if (ex.bankDetails) setForm(p => ({ ...p, bankDetails: ex.bankDetails })); toast.success("AI OK!"); } catch (e) { toast.error("IA Falhou."); } finally { setLoading(false); } }; r.readAsDataURL(f[0]); }, accept: {'image/*': [], 'application/pdf': []}, multiple: false });
 
   const shareWhatsApp = () => {
     const todayMs = form.milestones.filter(m => m.date === todayStr && !m.isPaid);
@@ -253,35 +272,44 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   const totalPaid = form.milestones.filter(m => m.isPaid).reduce((acc, m) => acc + m.amount, 0);
   const balanceDue = form.contractTotal - totalPaid;
 
-  const onDropProd = useCallback((f: File[]) => { const r = new FileReader(); r.onload = () => setForm(prev => ({ ...prev, productImage: r.result as string })); r.readAsDataURL(f[0]); }, []);
-  const onDropBank = useCallback(async (f: File[]) => { const r = new FileReader(); r.onload = async () => { const b = r.result as string; setForm(prev => ({ ...prev, bankImage: b })); setLoading(true); try { const t = await extractTextFromPDF(f[0]); const ex = await parsePaymentReceiptWithGroq(b, f[0].type, t); if (ex.bankDetails) setForm(prev => ({ ...prev, bankDetails: ex.bankDetails })); toast.success("AI OK!"); } catch (e) { toast.error("IA Falhou."); } finally { setLoading(false); } }; r.readAsDataURL(f[0]); }, []);
-  const { getRootProps: gp, getInputProps: ip } = useDropzone({ onDrop: onDropProd, accept: {'image/*': []}, multiple: false });
-  const { getRootProps: gb, getInputProps: ib } = useDropzone({ onDrop: onDropBank, accept: {'image/*': [], 'application/pdf': []}, multiple: false });
-
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-6 bg-[#f8fafc] min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center shadow-xl"><DollarSign className="text-emerald-400" size={28} /></div>
-          <div><h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Gestão Financeira</h1><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Michelin Dashboard</p></div>
+          <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center shadow-xl">
+            {companyLogo ? <img src={companyLogo} className="w-10 h-10 object-contain rounded-lg" /> : <DollarSign className="text-emerald-400" size={28} />}
+          </div>
+          <div><h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Gestão Financeira</h1><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Branding & Audit Control</p></div>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={saveRecord} className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-slate-800 transition-all flex items-center gap-2 shadow-xl"><Save size={18}/> Salvar</button>
-          <button onClick={exportSupplierPDF} className="px-6 py-4 bg-orange-500 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-orange-600 flex items-center gap-2 shadow-lg shadow-orange-100"><FileCheck size={18}/> Status Report (EN)</button>
+          <button onClick={exportSupplierPDF} className="px-6 py-4 bg-orange-500 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-orange-600 flex items-center gap-2 shadow-lg"><FileCheck size={18}/> Status Report (EN)</button>
           <button onClick={shareWhatsApp} className="px-6 py-4 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-emerald-600 flex items-center gap-2 shadow-xl shadow-emerald-200"><MessageSquare size={18}/> WhatsApp</button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-8">
+          {/* BRANDING SECTION */}
+          <div className="bg-white p-6 rounded-[32px] border border-blue-100 shadow-sm flex flex-col md:flex-row items-center gap-6">
+            <div className="flex-1">
+              <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2 mb-1"><PenTool size={14} /> Sua Logo (Branding)</h3>
+              <p className="text-[10px] text-slate-400 font-bold">Suba sua logo oficial para personalizar todos os relatórios PDF automaticamente.</p>
+            </div>
+            <div {...gLogo()} className="w-full md:w-64 h-24 border-2 border-dashed border-blue-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer overflow-hidden bg-blue-50/50 hover:bg-blue-50 transition-all">
+              <input {...iLogo()} />
+              {companyLogo ? <img src={companyLogo} className="w-full h-full object-contain p-2" /> : <div className="text-center"><Upload className="mx-auto text-blue-300 mb-1" size={20}/><p className="text-[9px] font-black text-blue-400 uppercase">Upload Logo</p></div>}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 space-y-4">
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><FileText size={14} className="text-blue-500" /> Invoice Data</h3>
-              <div {...gb()} className="w-full h-32 border-2 border-dashed border-slate-200 rounded-[24px] flex flex-col items-center justify-center cursor-pointer overflow-hidden group"><input {...ib()} />{form.bankImage ? <img src={form.bankImage} className="w-full h-full object-cover" /> : <div className="text-center"><FileDown className="mx-auto text-slate-300 mb-2" size={24}/><p className="text-[9px] font-black text-slate-400 uppercase">Audit AI</p></div>}</div>
+              <div {...gBank()} className="w-full h-32 border-2 border-dashed border-slate-200 rounded-[24px] flex flex-col items-center justify-center cursor-pointer overflow-hidden group"><input {...iBank()} />{form.bankImage ? <img src={form.bankImage} className="w-full h-full object-cover" /> : <div className="text-center"><FileDown className="mx-auto text-slate-300 mb-2" size={24}/><p className="text-[9px] font-black text-slate-400 uppercase">Audit AI</p></div>}</div>
             </div>
             <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 space-y-4">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ImageIcon size={14} className="text-emerald-500" /> Foto Produto</h3>
-              <div {...gp()} className="w-full h-32 border-2 border-dashed border-slate-200 rounded-[24px] flex flex-col items-center justify-center cursor-pointer overflow-hidden group"><input {...ip()} />{form.productImage ? <img src={form.productImage} className="w-full h-full object-cover" /> : <div className="text-center"><Zap className="mx-auto text-slate-300 mb-2" size={24}/><p className="text-[9px] font-black text-slate-400 uppercase">Snapshot</p></div>}</div>
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ImageIcon size={14} className="text-emerald-500" /> Foto Referência</h3>
+              <div {...gProd()} className="w-full h-32 border-2 border-dashed border-slate-200 rounded-[24px] flex flex-col items-center justify-center cursor-pointer overflow-hidden group"><input {...iProd()} />{form.productImage ? <img src={form.productImage} className="w-full h-full object-cover" /> : <div className="text-center"><Zap className="mx-auto text-slate-300 mb-2" size={24}/><p className="text-[9px] font-black text-slate-400 uppercase">Snapshot</p></div>}</div>
             </div>
           </div>
 
@@ -311,7 +339,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         </div>
 
         <div className="lg:col-span-4 space-y-8">
-          <div className="p-8 bg-white rounded-[40px] shadow-sm border border-slate-100"><h3 className="text-[11px] font-black text-slate-800 mb-6 flex items-center gap-2 uppercase"><Calculator size={18} /> Resumo</h3><div className="space-y-6"><div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100"><p className="text-[9px] text-slate-400 uppercase font-black mb-1">Câmbio: R$ {form.exchangeRate.toFixed(4)}</p><p className="text-xl font-black text-slate-900 font-mono-technical">R$ {(form.contractTotal * form.exchangeRate).toLocaleString('pt-BR')}</p><p className="text-[10px] text-slate-400 uppercase font-black mt-4 mb-1">Em Aberto</p><p className="text-2xl font-black text-red-600 font-mono-technical">$ {balanceDue.toLocaleString('pt-BR')}</p></div><div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full transition-all duration-1000 shadow-xl" style={{ width: `${(totalPaid / (form.contractTotal || 1)) * 100}%` }}></div></div></div></div>
+          <div className="p-8 bg-white rounded-[40px] shadow-sm border border-slate-100"><h3 className="text-[11px] font-black text-slate-800 mb-6 flex items-center gap-2 uppercase"><Calculator size={18} /> Resumo Gerencial</h3><div className="space-y-6"><div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100"><p className="text-[9px] text-slate-400 uppercase font-black mb-1">Câmbio: R$ {form.exchangeRate.toFixed(4)}</p><p className="text-xl font-black text-slate-900 font-mono-technical">R$ {(form.contractTotal * form.exchangeRate).toLocaleString('pt-BR')}</p><p className="text-[10px] text-slate-400 uppercase font-black mt-4 mb-1">Em Aberto</p><p className="text-2xl font-black text-red-600 font-mono-technical">$ {balanceDue.toLocaleString('pt-BR')}</p></div><div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full transition-all duration-1000 shadow-xl" style={{ width: `${(totalPaid / (form.contractTotal || 1)) * 100}%` }}></div></div></div></div>
           
           <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
             <div className="flex justify-between items-center mb-6"><h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><History size={16} className="text-blue-500" /> Histórico</h3><button onClick={clearAllHistory} className="w-8 h-8 bg-red-50 text-red-400 rounded-lg flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"><Eraser size={14}/></button></div>
