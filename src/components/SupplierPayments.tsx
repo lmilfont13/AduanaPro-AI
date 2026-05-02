@@ -175,7 +175,40 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   // DROPZONES (NO TOPO)
   const { getRootProps: gL, getInputProps: iL } = useDropzone({ onDrop: (f) => { const r = new FileReader(); r.onload = () => { localStorage.setItem('ADUANAPRO_COMPANY_LOGO', r.result as string); window.location.reload(); }; r.readAsDataURL(f[0]); }, accept: {'image/*': []}, multiple: false });
   const { getRootProps: gP, getInputProps: iP } = useDropzone({ onDrop: (f) => { const r = new FileReader(); r.onload = () => setForm(p => ({ ...p, productImage: r.result as string })); r.readAsDataURL(f[0]); }, accept: {'image/*': []}, multiple: false });
-  const { getRootProps: gB, getInputProps: iB } = useDropzone({ onDrop: async (f) => { const r = new FileReader(); r.onload = async () => { setForm(p => ({ ...p, bankImage: r.result as string })); setLoading(true); try { const t = await extractTextFromPDF(f[0]); const ex = await parsePaymentReceiptWithGroq(r.result as string, f[0].type, t); if (ex.bankDetails) setForm(p => ({ ...p, bankDetails: ex.bankDetails })); } catch(e){} finally { setLoading(false); } }; r.readAsDataURL(f[0]); }, accept: {'image/*': [], 'application/pdf': []}, multiple: false });
+  
+  // NOVO: Dropzone para Commercial Invoice (Preenchimento Automático)
+  const { getRootProps: gCI, getInputProps: iCI, isDragActive: isDragCI } = useDropzone({ 
+    onDrop: async (f) => {
+      setLoading(true);
+      const r = new FileReader();
+      r.onload = async () => {
+        try {
+          const t = await extractTextFromPDF(f[0]);
+          // Aqui chamamos o groqService (usando a mesma lógica do SWIFT adaptada ou uma nova se necessário)
+          const ex = await parsePaymentReceiptWithGroq(r.result as string, f[0].type, t);
+          if (ex) {
+            setForm(p => ({
+              ...p,
+              supplierName: ex.supplierName || p.supplierName,
+              ciNumber: ex.ciNumber || p.ciNumber,
+              contractTotal: Number(ex.amount || p.contractTotal),
+              bankDetails: ex.bankDetails || p.bankDetails
+            }));
+            toast.success("Dados da CI extraídos com sucesso!");
+          }
+        } catch(e) {
+          toast.error("Erro ao ler CI");
+        } finally {
+          setLoading(false);
+        }
+      };
+      r.readAsDataURL(f[0]);
+    }, 
+    accept: {'image/*': [], 'application/pdf': []}, 
+    multiple: false 
+  });
+
+  const { getRootProps: gB, getInputProps: iB, isDragActive: isDragB } = useDropzone({ onDrop: async (f) => { const r = new FileReader(); r.onload = async () => { setForm(p => ({ ...p, bankImage: r.result as string })); setLoading(true); try { const t = await extractTextFromPDF(f[0]); const ex = await parsePaymentReceiptWithGroq(r.result as string, f[0].type, t); if (ex.bankDetails) setForm(p => ({ ...p, bankDetails: ex.bankDetails })); } catch(e){} finally { setLoading(false); } }; r.readAsDataURL(f[0]); }, accept: {'image/*': [], 'application/pdf': []}, multiple: false });
 
   const shipmentDate = useMemo(() => {
     const d = new Date(form.orderDate + 'T12:00:00');
@@ -286,6 +319,18 @@ export default function SupplierPayments({ data, onUpdate }: any) {
           <div className="bg-white p-6 rounded-[32px] border border-blue-100 flex items-center gap-6">
             <div className="flex-1"><h3 className="text-[11px] font-black text-blue-600 uppercase mb-1">Sua Logo</h3><p className="text-[10px] text-slate-400">Arraste sua marca aqui.</p></div>
             <div {...gL()} className="w-32 h-20 border-2 border-dashed border-blue-200 rounded-xl flex items-center justify-center cursor-pointer overflow-hidden"><input {...iL()} />{companyLogo ? <img src={companyLogo} className="w-full h-full object-contain" /> : <Upload className="text-blue-300" size={20}/>}</div>
+          </div>
+
+          {/* NOVO: Super Dropzone para CI */}
+          <div {...gCI()} className={`group p-10 rounded-[48px] border-4 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center gap-4 ${isDragCI ? 'bg-blue-50 border-blue-500 scale-[1.02] shadow-2xl' : 'bg-white border-slate-100 hover:border-blue-300'}`}>
+            <input {...iCI()} />
+            <div className={`w-20 h-20 rounded-3xl flex items-center justify-center transition-all ${isDragCI ? 'bg-blue-500 text-white animate-bounce' : 'bg-blue-50 text-blue-500'}`}>
+              <Upload size={40} />
+            </div>
+            <div className="text-center">
+              <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Arraste a CI aqui para Extração</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[3px] mt-1">IA processará Fornecedor, Valor e CI automaticamente</p>
+            </div>
           </div>
 
           <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100 space-y-8">
