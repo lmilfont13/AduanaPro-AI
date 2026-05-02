@@ -152,10 +152,14 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         await supabase.from('supplier_payments').upsert({ id: recordId, supplier_name: form.supplierName, ci_number: form.ciNumber, contract_total: form.contractTotal, data: dataToSave, updated_at: new Date().toISOString() });
       }
       toast.success("Audit Salvo!");
-    } catch (e) { toast.error("Erro no salvamento."); } finally { setLoading(false); }
+    } catch (e) { toast.error("Falha no salvamento."); } finally { setLoading(false); }
   };
 
-  const clearAllHistory = () => { if (window.confirm("Zerar Histórico?")) { setHistory([]); localStorage.removeItem('ADUANAPRO_PAYMENTS_HISTORY'); setSelectedIds([]); toast.success("Reset OK!"); } };
+  const clearAllHistory = () => {
+    if (window.confirm("Deseja apagar TODO o histórico?")) {
+      setHistory([]); localStorage.removeItem('ADUANAPRO_PAYMENTS_HISTORY'); setSelectedIds([]); toast.success("Reset OK!");
+    }
+  };
 
   const exportConsolidatedPDF = () => {
     const records = history.filter(h => selectedIds.includes(h.id));
@@ -177,82 +181,55 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     const pageWidth = doc.internal.pageSize.width;
     const margin = 20;
 
-    // 1. LOGO SIMULADO (M)
+    // LOGO
     doc.setFillColor(249, 115, 22); doc.circle(pageWidth/2, 25, 10, 'F');
     doc.setTextColor(255, 255, 255); doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.text("m", pageWidth/2 - 2, 27);
 
-    // 2. HEADER TITLES
-    doc.setTextColor(15, 23, 42); doc.setFontSize(24); doc.setFont(undefined, 'bold');
-    doc.text("Payment Status Report", pageWidth/2, 45, { align: 'center' });
+    // HEADERS
+    doc.setTextColor(15, 23, 42); doc.setFontSize(24); doc.setFont(undefined, 'bold'); doc.text("Payment Status Report", pageWidth/2, 45, { align: 'center' });
     doc.setTextColor(249, 115, 22); doc.setFontSize(10); doc.text("OFFICIAL ORDER VERIFICATION", pageWidth/2, 52, { align: 'center' });
-    
     doc.setDrawColor(226, 232, 240); doc.line(margin, 60, pageWidth - margin, 60);
 
-    // 3. ORDER INFO
-    doc.setTextColor(15, 23, 42); doc.setFontSize(12); doc.setFont(undefined, 'bold');
-    doc.text(form.supplierName.toUpperCase(), margin, 75);
-    doc.setTextColor(148, 163, 184); doc.setFontSize(8); doc.setFont(undefined, 'normal');
-    doc.text(`REFERENCE: ${form.ciNumber}`, margin, 82);
+    // INFO
+    doc.setTextColor(15, 23, 42); doc.setFontSize(12); doc.setFont(undefined, 'bold'); doc.text(form.supplierName.toUpperCase(), margin, 75);
+    doc.setTextColor(148, 163, 184); doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.text(`REFERENCE: ${form.ciNumber}`, margin, 82);
+    doc.text("CONTRACT TOTAL", pageWidth - margin - 35, 75);
+    doc.setTextColor(15, 23, 42); doc.setFontSize(16); doc.setFont(undefined, 'bold'); doc.text(`USD ${form.contractTotal.toLocaleString('en-US')}`, pageWidth - margin, 83, { align: 'right' });
 
-    doc.setTextColor(148, 163, 184); doc.setFontSize(8); doc.text("CONTRACT TOTAL", pageWidth - margin - 35, 75);
-    doc.setTextColor(15, 23, 42); doc.setFontSize(16); doc.setFont(undefined, 'bold');
-    doc.text(`USD ${form.contractTotal.toLocaleString('en-US')}`, pageWidth - margin, 83, { align: 'right' });
-
-    // 4. SUMMARY BOXES
+    // CALCS
     const totalPaid = form.milestones.filter(m => m.isPaid).reduce((acc, m) => acc + m.amount, 0);
     const balance = form.contractTotal - totalPaid;
-    const paidPct = ((totalPaid / (form.contractTotal || 1)) * 100).toFixed(1);
-    const balancePct = ((balance / (form.contractTotal || 1)) * 100).toFixed(1);
+    const paidPct = (totalPaid / (form.contractTotal || 1) * 100).toFixed(1);
+    const balancePct = (balance / (form.contractTotal || 1) * 100).toFixed(1);
 
     // BOX GREEN
     doc.setFillColor(240, 253, 244); doc.roundedRect(margin, 100, 80, 50, 5, 5, 'F');
-    doc.setTextColor(22, 101, 52); doc.setFontSize(8); doc.text("PAID AMOUNT", margin + 10, 112);
+    doc.setTextColor(22, 101, 52); doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.text("PAID AMOUNT", margin + 10, 112);
     doc.text(`${paidPct}%`, margin + 70, 112, { align: 'right' });
     doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.text(`USD ${totalPaid.toLocaleString('en-US')}`, margin + 10, 128);
-    doc.setFillColor(187, 247, 208); doc.roundedRect(margin + 10, 138, 60, 4, 2, 2, 'F'); // Progress Track
-    doc.setFillColor(34, 197, 94); doc.roundedRect(margin + 10, 138, (Number(paidPct)/100)*60, 4, 2, 2, 'F'); // Progress Bar
+    doc.setFillColor(187, 247, 208); doc.roundedRect(margin + 10, 138, 60, 4, 2, 2, 'F');
+    doc.setFillColor(34, 197, 94); doc.roundedRect(margin + 10, 138, (Number(paidPct)/100)*60, 4, 2, 2, 'F');
 
     // BOX RED
     doc.setFillColor(254, 242, 242); doc.roundedRect(pageWidth - margin - 80, 100, 80, 50, 5, 5, 'F');
-    doc.setTextColor(153, 27, 27); doc.setFontSize(8); doc.text("REMAINING BALANCE", pageWidth - margin - 70, 112);
+    doc.setTextColor(153, 27, 27); doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.text("REMAINING BALANCE", pageWidth - margin - 70, 112);
     doc.text(`${balancePct}%`, pageWidth - margin - 10, 112, { align: 'right' });
     doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.text(`USD ${balance.toLocaleString('en-US')}`, pageWidth - margin - 70, 128);
-    doc.setFillColor(FECACA, 202, 202); doc.setFillColor(254, 202, 202); doc.roundedRect(pageWidth - margin - 70, 138, 60, 4, 2, 2, 'F');
+    doc.setFillColor(254, 202, 202); doc.roundedRect(pageWidth - margin - 70, 138, 60, 4, 2, 2, 'F');
     doc.setFillColor(239, 68, 68); doc.roundedRect(pageWidth - margin - 70, 138, (Number(balancePct)/100)*60, 4, 2, 2, 'F');
 
-    // 5. LEDGER TABLE
-    doc.setTextColor(148, 163, 184); doc.setFontSize(10); doc.setFont(undefined, 'bold');
-    doc.text("PAYMENT LEDGER", margin, 170);
-    doc.setFontSize(8); doc.text(`Paid: USD ${totalPaid.toLocaleString('en-US')}`, pageWidth - margin, 170, { align: 'right' });
-
+    // TABLE
+    doc.setTextColor(148, 163, 184); doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.text("PAYMENT LEDGER", margin, 170);
     const tableData = form.milestones.map(m => {
-      const pct = ((m.amount / (form.contractTotal || 1)) * 100).toFixed(1) + '%';
+      const pct = (m.amount / (form.contractTotal || 1) * 100).toFixed(1) + '%';
       return [
-        { content: `${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US')}\n${m.isPaid ? 'CONFIRMED PAID' : 'PENDING LIQUIDATION'}`, styles: { textColor: m.isPaid ? [22, 101, 52] : [148, 163, 184], fontStyle: m.isPaid ? 'bold' : 'normal', fontSize: 7 } },
+        { content: `${new Date(m.date + 'T12:00:00').toLocaleDateString('en-US')}\n${m.isPaid ? 'CONFIRMED PAID' : 'PENDING LIQUIDATION'}`, styles: { textColor: m.isPaid ? [22, 101, 52] : [148, 163, 184], fontSize: 7 } },
         m.description.toUpperCase(),
         pct,
         `USD ${m.amount.toLocaleString('en-US')}`
       ];
     });
-
-    autoTable(doc, {
-      startY: 175,
-      head: [['DATE', 'DESCRIPTION/MILESTONE', 'SHARE', 'USD VALUE']],
-      body: tableData,
-      theme: 'plain',
-      headStyles: { textColor: [148, 163, 184], fontSize: 8, fontStyle: 'bold', borderBottom: { color: [226, 232, 240], width: 1 } },
-      styles: { fontSize: 9, cellPadding: 6 },
-      columnStyles: { 3: { halign: 'right', fontStyle: 'bold' } },
-      didParseCell: (data) => {
-        if (data.row.index >= 0) {
-            const m = form.milestones[data.row.index];
-            if (m && m.isPaid && m.date === todayStr) {
-                data.cell.styles.fillColor = [255, 251, 235]; // Highlight New Payment
-            }
-        }
-      }
-    });
-
+    autoTable(doc, { startY: 175, head: [['DATE', 'DESCRIPTION/MILESTONE', 'SHARE', 'USD VALUE']], body: tableData, theme: 'plain', headStyles: { textColor: [148, 163, 184], fontSize: 8 }, styles: { fontSize: 9 }, columnStyles: { 3: { halign: 'right', fontStyle: 'bold' } } });
     doc.save(`Verification_${form.ciNumber}.pdf`);
   };
 
@@ -334,7 +311,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
                 <div><label className="text-[9px] font-black text-slate-400 uppercase block">Total Contrato USD $</label><input type="number" value={form.contractTotal} onChange={(e) => setForm(p => ({ ...p, contractTotal: Number(e.target.value) }))} className="w-full p-4 bg-slate-900 text-emerald-400 rounded-2xl text-[16px] font-black font-mono-technical border-none shadow-inner" /></div>
               </div>
             </div>
-            <div className="pt-6 border-t border-slate-100 flex gap-4"><div className="flex-1"><label className="text-[9px] font-black text-purple-600 uppercase block">Condição de Pagamento</label><input type="text" value={form.paymentTerms} onChange={(e) => setForm(p => ({ ...p, paymentTerms: e.target.value }))} className="w-full p-4 bg-purple-50 rounded-2xl text-[12px] font-black text-purple-900 border-none outline-none" /></div><button onClick={applyPaymentTerms} className="mt-5 px-6 bg-purple-600 text-white rounded-2xl text-[10px] font-black uppercase shadow-lg"><RefreshCw size={16}/></button></div>
+            <div className="pt-6 border-t border-slate-100 flex gap-4"><div className="flex-1"><label className="text-[9px] font-black text-purple-600 uppercase block">Preset de Pagamento</label><input type="text" value={form.paymentTerms} onChange={(e) => setForm(p => ({ ...p, paymentTerms: e.target.value }))} className="w-full p-4 bg-purple-50 rounded-2xl text-[12px] font-black text-purple-900 border-none outline-none" /></div><button onClick={applyPaymentTerms} className="mt-5 px-6 bg-purple-600 text-white rounded-2xl text-[10px] font-black uppercase shadow-lg"><RefreshCw size={16}/></button></div>
             <div className="pt-6 border-t border-slate-100"><h2 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Landmark size={16} /> Banco</h2><textarea value={form.bankDetails} onChange={(e) => setForm(p => ({ ...p, bankDetails: e.target.value }))} className="w-full h-24 p-4 bg-slate-50 rounded-2xl text-[10px] font-bold text-slate-600 border-none resize-none font-mono shadow-inner" /></div>
           </div>
 
