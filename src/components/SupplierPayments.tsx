@@ -217,29 +217,27 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     const brlValue = (form.contractTotal * (form.exchangeRate || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     let text = `💼 *SOLICITAÇÃO DE PAGAMENTO - ${form.supplierName}*\n\n` +
-               `\`\`\`` + // Início da fonte monoespaçada
                `${form.recipientName}, bom dia! 🏦 gostaria de formalizar o pedido de lançamento de câmbio conforme abaixo:\n\n` +
-               `Ref. Pedido: ${form.ciNumber} 📄\n` +
-               `Containers: ${form.containerNumber || 'N/E'}\n` +
-               `Produto: ${form.productName || 'N/I'}\n` +
-               `Previsão de Embarque: ${shipmentDate} 🚢\n` +
+               `*Ref. Pedido:* ${form.ciNumber} 📄\n` +
+               `*Containers:* ${form.containerNumber || 'Não especificado'}\n` +
+               `*Produto:* ${form.productName || 'N/I'}\n` +
+               `*Previsão de Embarque:* ${shipmentDate} 🚢\n` +
                `----------------------------------\n` +
-               `VALOR TOTAL DO CONTRATO: 💰 USD ${form.contractTotal.toLocaleString('pt-BR')} (R$ ${brlValue})\n` +
-               `TOTAL JÁ LIQUIDADO: USD ${totalPaid.toLocaleString('pt-BR')} (${paidPct}%)\n` +
-               `SALDO REMANESCENTE: USD ${totalUnpaid.toLocaleString('pt-BR')} (${unpaidPct}%)\n\n` +
-               `PARCELAS CONTRATO:\n`;
+               `*VALOR TOTAL DO CONTRATO:* 💰 USD ${form.contractTotal.toLocaleString('pt-BR')} (R$ ${brlValue})\n` +
+               `*TOTAL JÁ LIQUIDADO:* USD ${totalPaid.toLocaleString('pt-BR')} (${paidPct}%)\n` +
+               `*SALDO REMANESCENTE:* USD ${totalUnpaid.toLocaleString('pt-BR')} (${unpaidPct}%)\n\n` +
+               `*PARCELAS CONTRATO:*\n`;
                
     form.milestones.forEach((p: any) => {
       const dateFormatted = new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR');
       const isToday = p.date === todayStr;
-      const line = `${dateFormatted} | ${p.percentage}% | $ ${p.amount.toLocaleString('pt-BR')}${isToday ? ' <--- HOJE' : ''}`;
+      const line = `• Vencimento: ${dateFormatted} | Valor: USD ${p.amount.toLocaleString('pt-BR')} (${p.percentage}%)${isToday ? ' <--- HOJE' : ''}`;
       text += p.isPaid ? `~${line}~\n` : `${line}\n`;
     });
     
-    text += `\n🏦 DADOS BANCÁRIOS / OBSERVAÇÕES:\n` +
+    text += `\n🏦 *DADOS BANCÁRIOS / OBSERVAÇÕES:*\n` +
             `${form.bankDetails || 'Consultar Invoice Anexa'}\n\n` +
-            `Fico no aguardo do comprovante de pagamento, obrigado! 🤝\n` +
-            `\`\`\`\n\n` + // Fim da fonte monoespaçada
+            `Fico no aguardo do comprovante de pagamento, obrigado! 🤝\n\n` +
             `#Pagamento_${form.ciNumber.replace(/\s/g, '')}_`;
             
     setWhatsappText(text);
