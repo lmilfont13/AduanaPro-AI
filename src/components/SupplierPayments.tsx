@@ -191,7 +191,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
               ...p,
               supplierName: ex.supplierName || p.supplierName,
               ciNumber: ex.ciNumber || p.ciNumber,
-              contractTotal: Number(ex.amount || p.contractTotal),
+              contractTotal: Number(ex.contractTotal || p.contractTotal),
               bankDetails: ex.bankDetails || p.bankDetails
             }));
             toast.success("Dados da CI extraídos com sucesso!");
