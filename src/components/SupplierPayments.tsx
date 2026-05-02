@@ -197,73 +197,67 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     const ph = doc.internal.pageSize.height;
     let y = 15;
 
-    // Cabeçalho Principal com Proporção Automática e Tamanho Ampliado
+    // Cabeçalho Principal Equilibrado
     if (companyLogo) {
       try { 
         const imgProps = doc.getImageProperties(companyLogo);
-        const logoHeight = 25; // Aumentado de 15 para 25 para mais destaque
-        const logoWidth = (imgProps.width * logoHeight) / imgProps.height;
-        doc.addImage(companyLogo, 'PNG', 15, y, logoWidth, logoHeight); 
+        const logoH = 20; // 20mm é um tamanho ideal para cabeçalho
+        const logoW = (imgProps.width * logoH) / imgProps.height;
+        doc.addImage(companyLogo, 'PNG', 15, 12, logoW, logoH); 
       } catch(e){}
     }
     
-    doc.setFontSize(18); // Aumentado levemente o tamanho da fonte
+    doc.setFontSize(18);
     doc.setTextColor(15, 23, 42);
     doc.setFont("helvetica", "bold");
-    // Alinhamento vertical centralizado com a logo de 25mm
-    doc.text("RELATÓRIO CONSOLIDADO DE STATUS", pw - 15, y + 16, { align: 'right' });
-    y += 35; // Aumentado o espaçamento para não encavalar no conteúdo
+    doc.text("RELATÓRIO CONSOLIDADO DE STATUS", pw / 2, 22, { align: 'center' });
+    
+    y = 40; // Começo do conteúdo logo após o cabeçalho
 
     selectedRecords.forEach((record, index) => {
       const f = record.data;
-      const estimatedHeight = 70 + (f.milestones?.length || 0) * 10; // Margem de segurança aumentada
+      const estimatedHeight = 60 + (f.milestones?.length || 0) * 8;
 
-      // Verifica se precisa de nova página para o fornecedor
-      if (y + estimatedHeight > ph - 30) {
+      if (y + estimatedHeight > ph - 25) {
         doc.addPage();
         y = 15;
       }
 
-      // Separador sutil entre registros
-      if (index > 0) {
-        doc.setDrawColor(240);
-        doc.line(15, y - 5, pw - 15, y - 5);
-      }
-
-      // Foto Reduzida (Miniatura)
+      // Foto com Proporção Mantida
       if (f.productImage) {
         try { 
-          doc.addImage(f.productImage, 'JPEG', 15, y, 20, 20); 
+          const pProps = doc.getImageProperties(f.productImage);
+          const pH = 18;
+          const pW = (pProps.width * pH) / pProps.height;
+          doc.addImage(f.productImage, 'JPEG', 15, y, pW, pH); 
         } catch(e){
-          doc.setDrawColor(230); doc.rect(15, y, 20, 20);
+          doc.setDrawColor(230); doc.rect(15, y, 18, 18);
         }
       }
 
       doc.setFontSize(11);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(15, 23, 42);
-      doc.text(f.supplierName?.toUpperCase() || "FORNECEDOR N/I", 40, y + 5);
+      doc.text(f.supplierName?.toUpperCase() || "FORNECEDOR N/I", 45, y + 4);
       
       doc.setFontSize(8);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(100);
-      doc.text(`CI: ${f.ciNumber || "N/E"} | CTN: ${f.containerNumber || "N/E"}`, 40, y + 10);
+      doc.text(`CI: ${f.ciNumber || "N/E"} | CTN: ${f.containerNumber || "N/E"}`, 45, y + 9);
       
-      // Resumo Financeiro Compacto
       const totalPaid = (f.milestones || []).filter((m: any) => m.isPaid).reduce((acc: number, cur: any) => acc + Number(cur.amount), 0);
       const totalPending = Number(f.contractTotal || 0) - totalPaid;
       
       doc.setFontSize(8);
       doc.setTextColor(15, 23, 42);
-      doc.text(`TOTAL: $ ${Number(f.contractTotal || 0).toLocaleString('en-US')}`, 40, y + 16);
+      doc.text(`TOTAL: $ ${Number(f.contractTotal || 0).toLocaleString('en-US')}`, 45, y + 15);
       doc.setTextColor(16, 185, 129);
-      doc.text(`PAGO: $ ${totalPaid.toLocaleString('en-US')}`, 80, y + 16);
+      doc.text(`PAGO: $ ${totalPaid.toLocaleString('en-US')}`, 85, y + 15);
       doc.setTextColor(244, 63, 94);
-      doc.text(`SALDO: $ ${totalPending.toLocaleString('en-US')}`, 115, y + 16);
+      doc.text(`SALDO: $ ${totalPending.toLocaleString('en-US')}`, 120, y + 15);
 
-      y += 22;
+      y += 20;
 
-      // Tabela Ultra-Compacta
       const tableData = (f.milestones || []).map((m: any) => [
         new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR'),
         m.description?.toUpperCase(),
@@ -280,10 +274,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         theme: 'plain',
         styles: { fontSize: 7, cellPadding: 1 },
         headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold' },
-        columnStyles: {
-          2: { fontStyle: 'bold' },
-          4: { halign: 'right', fontStyle: 'bold' }
-        },
+        columnStyles: { 2: { fontStyle: 'bold' }, 4: { halign: 'right', fontStyle: 'bold' } },
         didDrawCell: (data) => {
           if (data.section === 'body' && data.column.index === 2) {
             const status = data.cell.raw;
@@ -293,7 +284,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         }
       });
 
-      y = (doc as any).lastAutoTable.finalY + 12;
+      y = (doc as any).lastAutoTable.finalY + 10;
     });
 
     // --- SEÇÃO DE RESUMO MENSAL (FLUXO DE CAIXA) ---
