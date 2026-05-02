@@ -316,7 +316,7 @@ export default function AduanaDashboard() {
               </div>
               <div className="flex flex-col">
                  <span className="text-[7px] font-black text-white/40 uppercase tracking-[2px]">Deploy Estável</span>
-                 <span className="text-[9px] font-black text-white uppercase tracking-tighter">v2.1-MAY-01-21:40</span>
+                 <span className="text-[9px] font-black text-white uppercase tracking-tighter">v2.6-MAY-01-23:18</span>
               </div>
            </div>
         </div>
