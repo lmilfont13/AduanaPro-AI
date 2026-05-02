@@ -333,7 +333,13 @@ export default function SupplierPayments({ data, onUpdate }: any) {
 
       y += 18;
 
-      const tableData = (f.milestones || []).map((m: any) => [
+      const sortedMilestones = [...(f.milestones || [])].sort((a: any, b: any) => {
+        if (a.isPaid && !b.isPaid) return -1;
+        if (!a.isPaid && b.isPaid) return 1;
+        return new Date(a.date + 'T12:00:00').getTime() - new Date(b.date + 'T12:00:00').getTime();
+      });
+
+      const tableData = sortedMilestones.map((m: any) => [
         new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR'),
         m.description?.toUpperCase(),
         m.isPaid ? 'PAGO' : 'PENDENTE',
@@ -383,7 +389,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     });
 
     // --- SEÇÃO DE RESUMO MENSAL (FLUXO DE CAIXA) ---
-    const monthlySummary: Record<string, number> = {};
+    const monthlySummary: Record<string, { label: string, amount: number }> = {};
     
     selectedRecords.forEach(record => {
       const ms = record.data?.milestones || [];
@@ -391,21 +397,20 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         if (!m.isPaid) {
           const d = new Date(m.date + 'T12:00:00');
           if (!isNaN(d.getTime())) {
-            const key = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
-            monthlySummary[key] = (monthlySummary[key] || 0) + Number(m.amount || 0);
+            const sortKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+            const label = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+            if (!monthlySummary[sortKey]) {
+              monthlySummary[sortKey] = { label, amount: 0 };
+            }
+            monthlySummary[sortKey].amount += Number(m.amount || 0);
           }
         }
       });
     });
 
     const summaryData = Object.entries(monthlySummary)
-      .sort((a, b) => {
-        // Ordenação cronológica simples baseada no nome do mês/ano
-        const [mA, yA] = a[0].split(' DE ');
-        const [mB, yB] = b[0].split(' DE ');
-        return new Date(`${mA} 1, ${yA}`).getTime() - new Date(`${mB} 1, ${yB}`).getTime();
-      })
-      .map(([month, total]) => [month, `$ ${total.toLocaleString('en-US')}`]);
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, val]) => [val.label, `$ ${val.amount.toLocaleString('en-US')}`]);
 
     if (summaryData.length > 0) {
       doc.addPage(); 
