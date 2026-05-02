@@ -76,6 +76,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   const todayStr = getTodayLocal();
 
   const [form, setForm] = useState({
+    id: data?.id || "",
     supplierName: data?.supplierName || "FORNECEDOR N/I",
     ciNumber: data?.ciNumber || "N/E",
     contractTotal: Number(data?.contractTotal || 0),
@@ -175,8 +176,8 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   }, [form.orderDate, form.contractTotal, form.productionDays, form.paymentTerms]);
 
   const saveRecord = async () => {
-    const rid = form.ciNumber !== "N/E" ? form.ciNumber : `R_${Date.now()}`;
-    const record = { id: rid, data: { ...form } };
+    const rid = (form as any).id || `R_${Date.now()}`;
+    const record = { id: rid, data: { ...form, id: rid } };
     const nh = [ record, ...history.filter(h => h.id !== rid) ];
     setHistory(nh);
     localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(nh));
@@ -188,6 +189,31 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       }
     }
     toast.success("Salvo!");
+  };
+
+  const clearForm = () => {
+    setForm({
+      id: '',
+      supplierName: "FORNECEDOR N/I",
+      ciNumber: "N/E",
+      contractTotal: 0,
+      currency: "USD",
+      containerNumber: "N/E",
+      exchangeRate: 0,
+      productName: "",
+      bankDetails: "",
+      recipientName: "Eveline",
+      orderDate: todayStr,
+      productionDays: 30,
+      paymentTerms: "30/70",
+      productImage: null,
+      bankImage: null,
+      milestones: [
+        { id: Math.random().toString(36).substring(2, 9), description: '30% Advance', percentage: 30, amount: 0, date: todayStr, isPaid: false },
+        { id: Math.random().toString(36).substring(2, 9), description: '70% Before Shipment', percentage: 70, amount: 0, date: todayStr, isPaid: false }
+      ]
+    });
+    setSelectedIds([]);
   };
 
   const deleteRecord = async (id: string) => {
@@ -587,6 +613,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             <input type="file" accept=".json" onChange={importData} className="hidden" />
           </label>
           <div className="w-px h-12 bg-slate-200 mx-2 hidden md:block"></div>
+          <button onClick={clearForm} className="px-6 py-4 bg-blue-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-blue-600 transition-all shadow-lg"><Plus size={18}/> Novo</button>
           <button onClick={sendGlobalWhatsapp} className="px-6 py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg"><MessageSquare size={18}/> WhatsApp Financeiro</button>
           <button onClick={saveRecord} className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg"><Save size={18}/> Salvar</button>
           <button onClick={exportStatusPDF} className="px-6 py-4 bg-orange-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-orange-600 transition-all shadow-lg"><FileCheck size={18}/> Status Report</button>
@@ -633,6 +660,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
                 <div><label className="text-[9px] font-black text-slate-400 uppercase block">Exportador</label><input type="text" value={form.supplierName} onChange={(e) => setForm(p => ({ ...p, supplierName: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black uppercase border-none focus:ring-2 ring-blue-500/20 outline-none" /></div>
+                <div><label className="text-[9px] font-black text-slate-400 uppercase block">Produto</label><input type="text" value={form.productName} onChange={(e) => setForm(p => ({ ...p, productName: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black uppercase border-none focus:ring-2 ring-blue-500/20 outline-none" placeholder="Ex: Máquina de Corte" /></div>
                 
                 {/* NOVO: Data do Pedido e Prazo de Produção lado a lado */}
                 <div className="grid grid-cols-2 gap-4">
@@ -686,7 +714,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
               </button>
             </div>
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              {Array.isArray(history) && history.map((h: any) => (<div key={h.id} className="flex items-center gap-2 group"><div onClick={() => setSelectedIds(prev => prev.includes(h.id) ? prev.filter(id => id !== h.id) : [...prev, h.id])} className={`w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer transition-all ${selectedIds.includes(h.id) ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>{selectedIds.includes(h.id) ? <CheckSquare size={14}/> : <Square size={14}/>}</div><div onClick={() => setForm({ ...h.data })} className="flex-1 p-4 rounded-2xl border bg-slate-50 border-slate-100 cursor-pointer hover:bg-slate-100 transition-all"><p className="text-[10px] font-black text-slate-900 uppercase truncate">{h.data?.ciNumber || "N/A"}</p><p className="text-[9px] font-bold text-slate-500 truncate">{h.data?.supplierName}</p></div><button onClick={() => deleteRecord(h.id)} className="w-8 h-8 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button></div>))}
+              {Array.isArray(history) && history.map((h: any) => (<div key={h.id} className="flex items-center gap-2 group"><div onClick={() => setSelectedIds(prev => prev.includes(h.id) ? prev.filter(id => id !== h.id) : [...prev, h.id])} className={`w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer transition-all ${selectedIds.includes(h.id) ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>{selectedIds.includes(h.id) ? <CheckSquare size={14}/> : <Square size={14}/>}</div><div onClick={() => setForm({ ...h.data, id: h.id })} className="flex-1 p-4 rounded-2xl border bg-slate-50 border-slate-100 cursor-pointer hover:bg-slate-100 transition-all"><p className="text-[10px] font-black text-slate-900 uppercase truncate">{h.data?.ciNumber || "N/A"}</p><p className="text-[9px] font-bold text-slate-500 truncate">{h.data?.supplierName}</p></div><button onClick={() => deleteRecord(h.id)} className="w-8 h-8 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button></div>))}
               {history.length === 0 && <div className="text-center py-10 opacity-20"><History className="mx-auto mb-2" size={24}/><p className="text-[8px] font-black uppercase">Histórico Vazio</p></div>}
             </div>
           </div>
