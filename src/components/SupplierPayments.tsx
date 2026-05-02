@@ -474,9 +474,37 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     setShowMsg(true);
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(whatsappText);
-    toast.success("Mensagem copiada com sucesso!");
+  const exportData = () => {
+    const data = {
+      records: history,
+      logo: companyLogo
+    };
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AduanaPro_Backup_${new Date().toLocaleDateString('pt-BR')}.json`;
+    a.click();
+    toast.success("Backup gerado com sucesso!");
+  };
+
+  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = JSON.parse(evt.target?.result as string);
+        if (data.records) {
+          localStorage.setItem('ADUANAPRO_SUPPLIER_PAYMENTS', JSON.stringify(data.records));
+          if (data.logo) localStorage.setItem('ADUANAPRO_COMPANY_LOGO', data.logo);
+          window.location.reload();
+        }
+      } catch (err) {
+        toast.error("Arquivo de backup inválido");
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -511,7 +539,13 @@ export default function SupplierPayments({ data, onUpdate }: any) {
           </div>
           <div><h1 className="text-3xl font-black text-slate-900 uppercase leading-none">Gestão Financeira</h1><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Safe Mode Active</p></div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={exportData} className="px-4 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-200 transition-all border border-slate-200" title="Exportar Backup"><FileDown size={18}/> Exportar</button>
+          <label className="px-4 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-200 transition-all border border-slate-200 cursor-pointer" title="Importar Backup">
+            <Upload size={18}/> Importar
+            <input type="file" accept=".json" onChange={importData} className="hidden" />
+          </label>
+          <div className="w-px h-12 bg-slate-200 mx-2 hidden md:block"></div>
           <button onClick={sendGlobalWhatsapp} className="px-6 py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg"><MessageSquare size={18}/> WhatsApp Financeiro</button>
           <button onClick={saveRecord} className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg"><Save size={18}/> Salvar</button>
           <button onClick={exportStatusPDF} className="px-6 py-4 bg-orange-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-orange-600 transition-all shadow-lg"><FileCheck size={18}/> Status Report</button>
