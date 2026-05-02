@@ -210,10 +210,10 @@ export default function SupplierPayments({ data, onUpdate }: any) {
 
     selectedRecords.forEach((record, index) => {
       const f = record.data;
-      const estimatedHeight = 50 + (f.milestones?.length || 0) * 8; // Estimativa de altura do bloco
+      const estimatedHeight = 70 + (f.milestones?.length || 0) * 10; // Margem de segurança aumentada
 
-      // Verifica se precisa de nova página
-      if (y + estimatedHeight > ph - 20) {
+      // Verifica se precisa de nova página para o fornecedor
+      if (y + estimatedHeight > ph - 30) {
         doc.addPage();
         y = 15;
       }
