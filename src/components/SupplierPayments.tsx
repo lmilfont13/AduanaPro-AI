@@ -206,6 +206,31 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
+  const sendGlobalWhatsapp = () => {
+    const pendings = form.milestones.filter((m: any) => !m.isPaid);
+    if (pendings.length === 0) { toast.error("Nenhuma parcela pendente!"); return; }
+    
+    let text = `*SOLICITAÇÃO DE PAGAMENTO CONSOLIDADA - ADUANAPRO*\n` +
+               `------------------------------------------\n` +
+               `*FORNECEDOR:* ${form.supplierName}\n` +
+               `*REF CI:* ${form.ciNumber}\n` +
+               `*ITEM:* ${form.productName || 'Não Informado'}\n\n` +
+               `*PARCELAS PENDENTES:*\n`;
+               
+    pendings.forEach((p: any) => {
+      text += `- ${p.description}: $ ${Number(p.amount).toLocaleString('pt-BR')} (${new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')})\n`;
+    });
+    
+    const total = pendings.reduce((acc: number, cur: any) => acc + Number(cur.amount), 0);
+    text += `\n*TOTAL PENDENTE:* $ ${total.toLocaleString('pt-BR')}\n\n` +
+            `*DADOS BANCÁRIOS:* \n${form.bankDetails || 'Consultar Invoice Anexa'}\n\n` +
+            `------------------------------------------\n` +
+            `#Pagamento_Consolidado_${form.ciNumber.replace(/\s/g, '_')}\n` +
+            `_Solicitação gerada via AduanaPro Intelligence_`;
+            
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-6 bg-[#f8fafc] min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
@@ -214,6 +239,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
           <div><h1 className="text-3xl font-black text-slate-900 uppercase leading-none">Gestão Financeira</h1><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Safe Mode Active</p></div>
         </div>
         <div className="flex gap-2">
+          <button onClick={sendGlobalWhatsapp} className="px-6 py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg"><MessageSquare size={18}/> WhatsApp Financeiro</button>
           <button onClick={saveRecord} className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg"><Save size={18}/> Salvar</button>
           <button onClick={exportStatusPDF} className="px-6 py-4 bg-orange-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-orange-600 transition-all shadow-lg"><FileCheck size={18}/> Status Report</button>
         </div>
