@@ -60,6 +60,7 @@ interface Milestone {
 export default function SupplierPayments({ data, onUpdate }: any) {
   const [loading, setLoading] = useState(false);
   const [showMsg, setShowMsg] = useState(false);
+  const [showVisualReport, setShowVisualReport] = useState(false);
   const [whatsappText, setWhatsappText] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   
@@ -592,8 +593,114 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     }
   };
 
+  const totalContract = Number(form.contractTotal) || 0;
+  const totalPaid = form.milestones.filter((m: any) => m.isPaid).reduce((acc, m) => acc + Number(m.amount), 0);
+  const totalPending = totalContract - totalPaid;
+  const paidPct = totalContract > 0 ? (totalPaid / totalContract) * 100 : 0;
+  const pendingPct = totalContract > 0 ? (totalPending / totalContract) * 100 : 0;
+
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-6 bg-[#f8fafc] min-h-screen">
+      {showVisualReport && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[200] flex flex-col items-center p-4 py-10 overflow-y-auto custom-scrollbar">
+          <div className="w-full max-w-[800px] flex justify-end mb-4 shrink-0">
+             <button onClick={() => setShowVisualReport(false)} className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center hover:bg-white/20 transition-all text-white"><X/></button>
+          </div>
+          
+          <div className="bg-white w-full max-w-[800px] rounded-xl shadow-2xl p-10 font-sans relative shrink-0">
+            <div className="flex flex-col items-center mb-8">
+              {companyLogo ? <img src={companyLogo} className="h-16 mb-4 object-contain" /> : <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-3xl mb-4">m</div>}
+              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Relatório de Pagamento</h1>
+              <p className="text-[11px] font-black text-orange-500 uppercase mt-1 tracking-widest">OFFICIAL ORDER VERIFICATION</p>
+            </div>
+            
+            <hr className="border-t border-slate-100 mb-8" />
+            
+            <div className="flex justify-between items-end mb-10">
+              <div>
+                <h2 className="text-lg font-black text-slate-900 uppercase max-w-[400px] leading-tight">{form.supplierName}</h2>
+                <p className="text-[10px] font-bold text-slate-500 uppercase mt-2">REFERENCE: {form.ciNumber}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">TOTAL DO CONTRATO</p>
+                <p className="text-2xl font-black text-slate-900">USD {totalContract.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-6 mb-10">
+              <div className="bg-emerald-50 rounded-2xl p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-[11px] font-black text-emerald-600 uppercase">Valor Pago</span>
+                  <span className="text-[11px] font-black text-emerald-600">{paidPct.toFixed(1)}%</span>
+                </div>
+                <p className="text-3xl font-black text-emerald-500 mb-6">USD {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <div className="h-3 w-full bg-emerald-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${paidPct}%` }}></div>
+                </div>
+              </div>
+              
+              <div className="bg-rose-50 rounded-2xl p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-[11px] font-black text-rose-600 uppercase">Saldo Remanescente</span>
+                  <span className="text-[11px] font-black text-rose-600">{pendingPct.toFixed(1)}%</span>
+                </div>
+                <p className="text-3xl font-black text-rose-500 mb-6">USD {totalPending.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <div className="h-3 w-full bg-rose-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-rose-500 rounded-full transition-all" style={{ width: `${pendingPct}%` }}></div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-between items-end mb-4 px-2">
+              <h3 className="text-[12px] font-black text-slate-500 uppercase tracking-widest">Extrato de Marcos (Payment Ledger)</h3>
+              <p className="text-[11px] font-bold text-slate-500">Pago: USD {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+            
+            <div className="w-full mb-10">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-slate-100">
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase">Data</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase">Descrição/Milestone</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase text-center">Share</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase text-right">USD Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...form.milestones].sort((a:any,b:any) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((m: any, i: number) => (
+                    <tr key={i} className={`border-b border-slate-100 ${m.isPaid ? 'bg-yellow-50/50 border-l-4 border-l-yellow-400' : 'bg-white border-l-4 border-l-transparent'}`}>
+                      <td className="py-4 px-4">
+                        <p className="text-[11px] font-bold text-slate-700">{m.date}</p>
+                        <p className={`text-[8px] font-black uppercase mt-1 ${m.isPaid ? 'text-emerald-500' : 'text-slate-400'}`}>{m.isPaid ? 'PAGAMENTO CONFIRMADO' : 'AGUARDANDO LIQUIDAÇÃO'}</p>
+                      </td>
+                      <td className="py-4 px-4 text-[11px] font-medium text-slate-600">{m.description}</td>
+                      <td className="py-4 px-4 text-[11px] font-bold text-slate-600 text-center">{m.percentage}%</td>
+                      <td className="py-4 px-4 text-[11px] font-black text-slate-900 text-right">USD {Number(m.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="bg-slate-50 p-6 rounded-2xl flex justify-between items-center">
+              <div className="space-y-4">
+                <div className="flex gap-4">
+                  <span className="text-[11px] font-black text-slate-500 uppercase w-32">Total do Contrato:</span>
+                  <span className="text-[12px] font-black text-slate-900">USD {totalContract.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex gap-4">
+                  <span className="text-[11px] font-black text-slate-500 uppercase w-32">Total Liquidado:</span>
+                  <span className="text-[12px] font-black text-emerald-500">USD {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({paidPct.toFixed(1)}%)</span>
+                </div>
+              </div>
+              <div className="bg-rose-500 rounded-xl p-5 text-center min-w-[200px] shadow-lg shadow-rose-500/20">
+                <p className="text-[9px] font-black text-rose-100 uppercase mb-1">Saldo Remanescente</p>
+                <p className="text-xl font-black text-white">USD {totalPending.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {showMsg && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
@@ -632,6 +739,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
           </label>
           <div className="w-px h-12 bg-slate-200 mx-2 hidden md:block"></div>
           <button onClick={clearForm} className="px-6 py-4 bg-blue-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-blue-600 transition-all shadow-lg"><Plus size={18}/> Novo</button>
+          <button onClick={() => setShowVisualReport(true)} className="px-6 py-4 bg-indigo-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-indigo-600 transition-all shadow-lg"><FileText size={18}/> Relatório Visual</button>
           <button onClick={sendGlobalWhatsapp} className="px-6 py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg"><MessageSquare size={18}/> WhatsApp Financeiro</button>
           <button onClick={saveRecord} className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg"><Save size={18}/> Salvar</button>
           <button onClick={exportStatusPDF} className="px-6 py-4 bg-orange-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-orange-600 transition-all shadow-lg"><FileCheck size={18}/> Status Report</button>
