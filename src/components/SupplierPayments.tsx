@@ -191,19 +191,22 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   }, [form.orderDate, form.productionDays]);
 
   const sendWhatsapp = (p: any) => {
-    const text = `*SOLICITAÇÃO DE PAGAMENTO - ADUANAPRO*\n` +
-                 `------------------------------------------\n` +
-                 `*FORNECEDOR:* ${form.supplierName}\n` +
-                 `*REF CI:* ${p.ref}\n` +
-                 `*ITEM:* ${form.productName || 'Não Informado'}\n\n` +
+    const text = `💼 *SOLICITAÇÃO DE PAGAMENTO - ${form.supplierName}*\n\n` +
+                 `${form.recipientName}, bom dia! 🏦 gostaria de formalizar o pedido de lançamento de câmbio conforme abaixo:\n\n` +
+                 `*Ref. Pedido:* ${p.ref} 📄\n` +
+                 `*Containers:* ${form.containerNumber || 'Não especificado'}\n` +
+                 `*Produto:* ${form.productName || 'N/I'}\n` +
+                 `*Previsão de Embarque:* ${shipmentDate} 🚢\n` +
+                 `----------------------------------\n\n` +
                  `*MILESTONE:* ${p.description}\n` +
                  `*VALOR:* $ ${Number(p.amount).toLocaleString('pt-BR')}\n` +
                  `*DATA PROGRAMADA:* ${new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')}\n\n` +
-                 `*DADOS BANCÁRIOS:* \n${form.bankDetails || 'Consultar Invoice Anexa'}\n\n` +
-                 `------------------------------------------\n` +
-                 `#Pagamento_${p.ref.replace(/\s/g, '_')}_${form.supplierName.split(' ')[0]}\n` +
-                 `_Solicitação gerada via AduanaPro Intelligence_`;
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+                 `🏦 *DADOS BANCÁRIOS / OBSERVAÇÕES:*\n` +
+                 `${form.bankDetails || 'Consultar Invoice Anexa'}\n\n` +
+                 `Fico no aguardo do comprovante de pagamento, obrigado! 🤝\n\n` +
+                 `#Pagamento_${p.ref.replace(/\s/g, '')}_`;
+    setWhatsappText(text);
+    setShowMsg(true);
   };
 
   const sendGlobalWhatsapp = () => {
@@ -234,11 +237,39 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             `Fico no aguardo do comprovante de pagamento, obrigado! 🤝\n\n` +
             `#Pagamento_${form.ciNumber.replace(/\s/g, '')}_`;
             
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+    setWhatsappText(text);
+    setShowMsg(true);
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(whatsappText);
+    toast.success("Mensagem copiada com sucesso!");
   };
 
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-6 bg-[#f8fafc] min-h-screen">
+      {showMsg && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black uppercase flex items-center gap-2"><MessageSquare className="text-emerald-400"/> Prévia do Câmbio</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Confira os dados antes de copiar</p>
+              </div>
+              <button onClick={() => setShowMsg(false)} className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center hover:bg-white/20 transition-all"><X/></button>
+            </div>
+            <div className="p-8">
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 max-h-[400px] overflow-y-auto custom-scrollbar">
+                <pre className="text-[12px] font-medium text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{whatsappText}</pre>
+              </div>
+              <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button onClick={copyToClipboard} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[11px] flex items-center justify-center gap-2 hover:bg-slate-800 transition-all active:scale-95 shadow-xl"><CheckCircle size={18}/> Copiar Mensagem</button>
+                <button onClick={() => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappText)}`, '_blank')} className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase text-[11px] flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all active:scale-95 shadow-xl"><MessageSquare size={18}/> Enviar p/ WhatsApp</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
         <div className="flex items-center gap-3">
           <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center shadow-xl">{companyLogo ? <img src={companyLogo} className="w-10 h-10 object-contain" /> : <DollarSign className="text-emerald-400" size={28} />}</div>
