@@ -46,6 +46,7 @@ import autoTable from 'jspdf-autotable';
 import { parsePaymentReceiptWithGroq } from '../services/groqService';
 import { extractTextFromPDF } from '../services/pdfService';
 import { toast } from 'sonner';
+import { supabase } from '../lib/supabase';
 
 interface Milestone {
   id: string;
@@ -99,12 +100,24 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     })) as Milestone[]
   });
 
-  const [history, setHistory] = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem('ADUANAPRO_PAYMENTS_HISTORY');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) { return []; }
-  });
+  const [history, setHistory] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (typeof supabase !== 'undefined') {
+        const { data, error } = await supabase.from('supplier_payments').select('*').order('created_at', { ascending: false });
+        if (!error && data) {
+          setHistory(data.map(r => ({ id: r.id, data: r.data })));
+          return;
+        }
+      }
+      try {
+        const saved = localStorage.getItem('ADUANAPRO_PAYMENTS_HISTORY');
+        if (saved) setHistory(JSON.parse(saved));
+      } catch (e) {}
+    };
+    fetchHistory();
+  }, []);
 
   // Sincronização Segura
   // Salvamento manual via botão para evitar loops de reinicialização
@@ -161,12 +174,30 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     });
   }, [form.orderDate, form.contractTotal, form.productionDays, form.paymentTerms]);
 
-  const saveRecord = () => {
+  const saveRecord = async () => {
     const rid = form.ciNumber !== "N/E" ? form.ciNumber : `R_${Date.now()}`;
-    const nh = [ { id: rid, data: { ...form } }, ...history.filter(h => h.id !== rid) ];
+    const record = { id: rid, data: { ...form } };
+    const nh = [ record, ...history.filter(h => h.id !== rid) ];
     setHistory(nh);
     localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(nh));
+    
+    if (typeof supabase !== 'undefined') {
+      const { error } = await supabase.from('supplier_payments').upsert([{ id: rid, data: record.data }]);
+      if (error) {
+        console.error("Supabase Save Error:", error);
+      }
+    }
     toast.success("Salvo!");
+  };
+
+  const deleteRecord = async (id: string) => {
+    const nh = history.filter(x => x.id !== id);
+    setHistory(nh);
+    localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(nh));
+    if (typeof supabase !== 'undefined') {
+      await supabase.from('supplier_payments').delete().eq('id', id);
+    }
+    toast.success("Registro removido!");
   };
 
   const nextPayments = useMemo(() => {
@@ -655,7 +686,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
               </button>
             </div>
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              {Array.isArray(history) && history.map((h: any) => (<div key={h.id} className="flex items-center gap-2 group"><div onClick={() => setSelectedIds(prev => prev.includes(h.id) ? prev.filter(id => id !== h.id) : [...prev, h.id])} className={`w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer transition-all ${selectedIds.includes(h.id) ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>{selectedIds.includes(h.id) ? <CheckSquare size={14}/> : <Square size={14}/>}</div><div onClick={() => setForm({ ...h.data })} className="flex-1 p-4 rounded-2xl border bg-slate-50 border-slate-100 cursor-pointer hover:bg-slate-100 transition-all"><p className="text-[10px] font-black text-slate-900 uppercase truncate">{h.data?.ciNumber || "N/A"}</p><p className="text-[9px] font-bold text-slate-500 truncate">{h.data?.supplierName}</p></div><button onClick={() => setHistory(history.filter(x => x.id !== h.id))} className="w-8 h-8 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button></div>))}
+              {Array.isArray(history) && history.map((h: any) => (<div key={h.id} className="flex items-center gap-2 group"><div onClick={() => setSelectedIds(prev => prev.includes(h.id) ? prev.filter(id => id !== h.id) : [...prev, h.id])} className={`w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer transition-all ${selectedIds.includes(h.id) ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>{selectedIds.includes(h.id) ? <CheckSquare size={14}/> : <Square size={14}/>}</div><div onClick={() => setForm({ ...h.data })} className="flex-1 p-4 rounded-2xl border bg-slate-50 border-slate-100 cursor-pointer hover:bg-slate-100 transition-all"><p className="text-[10px] font-black text-slate-900 uppercase truncate">{h.data?.ciNumber || "N/A"}</p><p className="text-[9px] font-bold text-slate-500 truncate">{h.data?.supplierName}</p></div><button onClick={() => deleteRecord(h.id)} className="w-8 h-8 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button></div>))}
               {history.length === 0 && <div className="text-center py-10 opacity-20"><History className="mx-auto mb-2" size={24}/><p className="text-[8px] font-black uppercase">Histórico Vazio</p></div>}
             </div>
           </div>
