@@ -397,8 +397,9 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             }));
             toast.success("Dados da CI extraídos com sucesso!");
           }
-        } catch(e) {
-          toast.error("Erro ao ler CI");
+        } catch(e: any) {
+          console.error(e);
+          toast.error("Erro ao ler CI: " + (e.message || "Erro desconhecido"));
         } finally {
           setLoading(false);
         }
@@ -409,7 +410,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     multiple: false 
   });
 
-  const { getRootProps: gB, getInputProps: iB, isDragActive: isDragB } = useDropzone({ onDrop: async (f) => { const r = new FileReader(); r.onload = async () => { setForm(p => ({ ...p, bankImage: r.result as string })); setLoading(true); try { const t = await extractTextFromPDF(f[0]); const ex = await parsePaymentReceiptWithGroq(r.result as string, f[0].type, t); if (ex.bankDetails) setForm(p => ({ ...p, bankDetails: ex.bankDetails })); } catch(e){} finally { setLoading(false); } }; r.readAsDataURL(f[0]); }, accept: {'image/*': [], 'application/pdf': []}, multiple: false });
+  const { getRootProps: gB, getInputProps: iB, isDragActive: isDragB } = useDropzone({ onDrop: async (f) => { const r = new FileReader(); r.onload = async () => { setForm(p => ({ ...p, bankImage: r.result as string })); setLoading(true); try { const t = await extractTextFromPDF(f[0]); const ex = await parsePaymentReceiptWithGroq(r.result as string, f[0].type, t); if (ex.bankDetails) setForm(p => ({ ...p, bankDetails: ex.bankDetails })); } catch(e: any){ console.error(e); toast.error("Erro no Bank: " + (e.message || "")); } finally { setLoading(false); } }; r.readAsDataURL(f[0]); }, accept: {'image/*': [], 'application/pdf': []}, multiple: false });
 
   const shipmentDate = useMemo(() => {
     const d = new Date(form.orderDate + 'T12:00:00');
@@ -505,6 +506,15 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       }
     };
     reader.readAsText(file);
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(whatsappText);
+      toast.success("Mensagem copiada!");
+    } catch (err) {
+      toast.error("Erro ao copiar mensagem.");
+    }
   };
 
   return (

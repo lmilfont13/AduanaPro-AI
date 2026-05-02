@@ -206,7 +206,7 @@ export const parsePaymentReceiptWithGroq = async (base64Data: string, mimeType: 
   ${pdfText}
   ${base64Data ? "\n(Também utilize a imagem/PDF para validar dados visuais)" : ""}`;
   
-  return await callAI(prompt, base64Data);
+  return await callAI(prompt, base64Data, pdfText);
 };
 
 export const compareDocumentsWithGroq = async (bl: any, ci: any, pl: any): Promise<any> => {
