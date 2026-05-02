@@ -268,7 +268,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         m.description?.toUpperCase(),
         m.isPaid ? 'PAGO' : 'PENDENTE',
         `${m.percentage}%`,
-        `$ ${Number(m.amount).toLocaleString('en-US')}`
+        `$ ${Number(m.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       ]);
 
       autoTable(doc, {
@@ -360,6 +360,11 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold' },
         columnStyles: {
           1: { halign: 'right', fontStyle: 'bold', textColor: [244, 63, 94] }
+        },
+        didParseCell: (data) => {
+          if (data.section === 'head' && data.column.index === 1) {
+            data.cell.styles.halign = 'right';
+          }
         }
       });
     }
