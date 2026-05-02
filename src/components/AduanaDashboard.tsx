@@ -266,6 +266,44 @@ export default function AduanaDashboard() {
     );
   }
 
+  const exportAllData = () => {
+    const data: any = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith('ADUANAPRO_')) {
+        data[key] = localStorage.getItem(key);
+      }
+    }
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AduanaPro_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    toast.success("Backup gerado! Agora use 'Importar' no outro link.");
+  };
+
+  const importAllData = (event: any) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        Object.keys(data).forEach(key => {
+          if (key.startsWith('ADUANAPRO_')) {
+            localStorage.setItem(key, data[key]);
+          }
+        });
+        toast.success("Dados restaurados! Reiniciando...");
+        setTimeout(() => window.location.reload(), 1500);
+      } catch (err) {
+        toast.error("Erro ao importar arquivo.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="min-h-screen bg-[#F8F9FC] flex overflow-hidden font-sans animate-in zoom-in-95 duration-500">
       <aside className="w-80 bg-[#0F172A] flex flex-col h-screen shrink-0 shadow-2xl relative z-20">
@@ -277,13 +315,6 @@ export default function AduanaDashboard() {
               <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest mt-2">Intelligence</span>
             </div>
           </div>
-          <button 
-            onClick={() => setView('desktop')}
-            className="w-10 h-10 rounded-xl bg-white/5 text-white/40 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center"
-            title="Voltar para Área de Trabalho"
-          >
-            <LayoutDashboard size={18} />
-          </button>
         </div>
         <nav className="flex-1 px-6 py-10 space-y-2 overflow-y-auto custom-scrollbar">
           {[
@@ -309,6 +340,19 @@ export default function AduanaDashboard() {
             </button>
           ))}
         </nav>
+        
+        <div className="px-6 py-4 border-t border-white/5 grid grid-cols-2 gap-2">
+          <button onClick={exportAllData} className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white/5 text-white/60 hover:bg-white/10 transition-all border border-white/5 group">
+            <Rocket size={14} className="mb-1 text-orange-500" />
+            <span className="text-[7px] font-black uppercase tracking-wider group-hover:text-white">Exportar</span>
+          </button>
+          <label className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white/5 text-white/60 hover:bg-white/10 transition-all border border-white/5 cursor-pointer group">
+            <FileDown size={14} className="mb-1 text-emerald-400" />
+            <span className="text-[7px] font-black uppercase tracking-wider group-hover:text-white">Importar</span>
+            <input type="file" className="hidden" accept=".json" onChange={importAllData} />
+          </label>
+        </div>
+
         <div className="p-8 border-t border-white/5 bg-white/5">
            <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center text-indigo-400">
