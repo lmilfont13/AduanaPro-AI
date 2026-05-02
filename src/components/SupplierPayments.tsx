@@ -154,19 +154,12 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     } catch (e) { toast.error("Erro no salvamento."); } finally { setLoading(false); }
   };
 
-  const deleteHistoryRecord = (id: string) => {
-    const newHistory = history.filter(h => h.id !== id);
-    setHistory(newHistory);
-    localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(newHistory));
-    toast.success("Registro Excluído.");
-  };
-
   const clearAllHistory = () => {
-    if (window.confirm("ATENÇÃO: Isso irá apagar TODO o seu histórico permanentemente. Deseja continuar?")) {
+    if (window.confirm("Deseja apagar TODO o histórico?")) {
       setHistory([]);
       localStorage.removeItem('ADUANAPRO_PAYMENTS_HISTORY');
       setSelectedIds([]);
-      toast.success("Todo o histórico foi apagado!");
+      toast.success("Histórico Resetado!");
     }
   };
 
@@ -175,38 +168,42 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     const pageWidth = doc.internal.pageSize.width;
     doc.setFillColor(15, 23, 42); doc.rect(0, 0, pageWidth, 45, 'F');
     doc.setTextColor(255, 255, 255); doc.setFontSize(22); doc.text("AUDIT REPORT - " + form.ciNumber, 20, 25);
-    if (form.productImage) try { doc.addImage(form.productImage, 'JPEG', pageWidth - 50, 8, 30, 30); } catch (e) {}
-    const tableData = form.milestones.map(m => [new Date(m.date + 'T12:00:00').toLocaleDateString(), m.description, `$ ${m.amount.toLocaleString('pt-BR')}`, m.isPaid ? "PAGO" : "PENDENTE"]);
-    autoTable(doc, { startY: 60, head: [['DATA', 'FASE', 'VALOR USD $', 'STATUS']], body: tableData, theme: 'grid', headStyles: { fillStyle: [15, 23, 42] } });
+    const tableData = form.milestones.map(m => {
+      const pct = ((m.amount / (form.contractTotal || 1)) * 100).toFixed(0) + '%';
+      return [new Date(m.date + 'T12:00:00').toLocaleDateString(), `${m.description} (${pct})`, `$ ${m.amount.toLocaleString('pt-BR')}`, m.isPaid ? "PAGO" : "PENDENTE"];
+    });
+    autoTable(doc, { startY: 60, head: [['DATA', 'FASE (%)', 'VALOR USD $', 'STATUS']], body: tableData, theme: 'grid', headStyles: { fillStyle: [15, 23, 42] } });
     doc.save(`Audit_${form.ciNumber}.pdf`);
-  };
-
-  const exportConsolidatedPDF = () => {
-    const records = history.filter(h => selectedIds.includes(h.id));
-    if (records.length === 0) { toast.error("Selecione os pedidos no histórico lateral."); return; }
-    const doc = new jsPDF() as any;
-    const pageWidth = doc.internal.pageSize.width;
-    doc.setFillColor(15, 23, 42); doc.rect(0, 0, pageWidth, 45, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(20); doc.text("FLUXO DE CAIXA CONSOLIDADO", 20, 25);
-    doc.setFontSize(9); doc.text(`ITENS: ${records.length} | DATA: ${new Date().toLocaleDateString()}`, 20, 32);
-    let allMs: any[] = [];
-    records.forEach(r => { (r.data.milestones || []).forEach((m: any) => allMs.push({ ...m, supplier: r.data.supplierName, ref: r.data.ciNumber })); });
-    allMs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const tableData = allMs.map(m => [new Date(m.date + 'T12:00:00').toLocaleDateString(), m.supplier.substring(0, 15), m.ref, m.description.substring(0, 15), `$ ${m.amount.toLocaleString('pt-BR')}`, m.isPaid ? "OK" : "PEND"]);
-    autoTable(doc, { startY: 55, head: [['DATA', 'FORNECEDOR', 'REF', 'FASE', 'USD $', 'STATUS']], body: tableData, theme: 'grid', headStyles: { fillStyle: [15, 23, 42] } });
-    doc.save("Fluxo_Global_AduanaPro.pdf");
   };
 
   const shareWhatsApp = () => {
     const todayMs = form.milestones.filter(m => m.date === todayStr && !m.isPaid);
     const hasToday = todayMs.length > 0;
-    let header = hasToday ? `🔴🔴🔴🔴🔴🔴🔴\n🚨 *PAGAMENTO PARA HOJE* 🚨\n🔴🔴🔴🔴🔴🔴🔴` : `💼 *SOLICITAÇÃO DE PAGAMENTO*`;
-    let urgency = hasToday ? `💸 *PAGAR AGORA:*` + "```" + `\n` + todayMs.map(m => `${m.description.toUpperCase()} ($ ${m.amount.toLocaleString('pt-BR')})`).join('\n') + "```" + `\n\n` : "";
-    const bank = form.bankDetails.split('\n').slice(0, 5).join(' | ');
-    let text = `${header}\n${form.supplierName}\n\n${form.recipientName}, bom dia! 🏦 Segue formalização:\n\n📄 *DADOS:* ${form.ciNumber}\n📦 *CONTAINER:* ${form.containerNumber}\n🚢 *EMBARQUE:* ${shipmentDate}\n\n${urgency}💰 *FINANCEIRO:*` + "```" + `\nTOTAL: $ ${form.contractTotal.toLocaleString('pt-BR')}\nTAXA: R$ ${form.exchangeRate.toFixed(4)}\nEST. BRL: R$ ${(form.contractTotal * form.exchangeRate).toLocaleString('pt-BR')}\n` + "```" + `\n\n`;
-    if (form.milestones.length > 0) {
-      text += `📅 *PARCELAS:*` + "```" + `\n` + form.milestones.map(m => `${new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR').substring(0, 5)} | $ ${m.amount.toLocaleString('pt-BR').padStart(10)} ${m.date === todayStr ? '⚠️' : (m.isPaid ? '✓' : ' ')}`).join('\n') + "```" + `\n\n`;
+    const header = `💼 *SOLICITAÇÃO DE PAGAMENTO*`;
+    
+    let urgency = "";
+    if (hasToday) {
+      urgency = `🚨 *URGENTE:* -------------------------> *PAGAR HOJE*\n`;
+      todayMs.forEach(m => {
+        const pct = ((m.amount / (form.contractTotal || 1)) * 100).toFixed(0) + '%';
+        urgency += `*${m.description.toUpperCase()} (${pct})*\nUSD $ ${m.amount.toLocaleString('pt-BR')} | BRL EST. R$ ${(m.amount * form.exchangeRate).toLocaleString('pt-BR')}\n`;
+      });
+      urgency += `-----------------------------------------\n\n`;
     }
+
+    const bank = form.bankDetails.split('\n').slice(0, 5).join(' | ');
+    let text = `${header}\n${form.supplierName}\n\n${form.recipientName}, bom dia! 🏦 Segue formalização:\n\n📄 *DADOS:* ${form.ciNumber}\n📦 *CONTAINER:* ${form.containerNumber}\n🚢 *EMBARQUE:* ${shipmentDate}\n\n${urgency}💰 *FINANCEIRO:*` + "```" + `\nTOTAL: $ ${form.contractTotal.toLocaleString('pt-BR')}\nTAXA: R$ ${form.exchangeRate.toFixed(4)}\nBRL: R$ ${(form.contractTotal * form.exchangeRate).toLocaleString('pt-BR')}\n` + "```" + `\n\n`;
+    
+    if (form.milestones.length > 0) {
+      text += `📅 *PARCELAS:*` + "```" + `\n` + form.milestones.map(m => {
+        const dt = new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR').substring(0, 5);
+        const pct = ((m.amount / (form.contractTotal || 1)) * 100).toFixed(0).padStart(2, ' ') + '%';
+        const valUsd = `$ ${m.amount.toLocaleString('pt-BR')}`.padStart(10, ' ');
+        const indicator = m.date === todayStr ? ' <--- HOJE' : (m.isPaid ? ' ✓' : '  ');
+        return `${dt} | ${pct} | ${valUsd}${indicator}`;
+      }).join('\n') + "```" + `\n\n`;
+    }
+    
     text += `🏦 *BANCO:* ${bank.substring(0, 250)}...\n\n🤝 #Pg_${form.ciNumber}`;
     setWhatsappText(text); setShowMsg(true);
   };
@@ -214,32 +211,27 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   const totalPaid = form.milestones.filter(m => m.isPaid).reduce((acc, m) => acc + m.amount, 0);
   const balanceDue = form.contractTotal - totalPaid;
 
-  const onDropProd = useCallback((f: File[]) => { const r = new FileReader(); r.onload = () => setForm(p => ({ ...p, productImage: r.result as string })); r.readAsDataURL(f[0]); }, []);
-  const { getRootProps: gp, getInputProps: gi } = useDropzone({ onDrop: onDropProd, accept: {'image/*': []}, multiple: false });
-
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-6 bg-[#f8fafc] min-h-screen">
-      {/* HEADER PRINCIPAL */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div className="flex items-center gap-3">
           <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center shadow-xl"><DollarSign className="text-emerald-400" size={28} /></div>
-          <div><h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Gestão Financeira</h1><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Audit Control Center</p></div>
+          <div><h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Gestão Financeira</h1><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Michelin Executive Audit</p></div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={saveRecord} className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-slate-800 transition-all flex items-center gap-2 shadow-xl"><Save size={18}/> Salvar Pedido</button>
-          <button onClick={exportConsolidatedPDF} className="px-6 py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-100"><BarChart3 size={18}/> Gerar Fluxo Seletivo</button>
-          <button onClick={shareWhatsApp} className="px-6 py-4 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-emerald-600 flex items-center gap-2 shadow-xl shadow-emerald-200"><MessageSquare size={18}/> Enviar WhatsApp</button>
+          <button onClick={saveRecord} className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-slate-800 transition-all flex items-center gap-2"><Save size={18}/> Salvar</button>
+          <button onClick={shareWhatsApp} className="px-6 py-4 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-emerald-600 flex items-center gap-2 shadow-xl shadow-emerald-200"><MessageSquare size={18}/> WhatsApp</button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-8">
-          {/* FORMULÁRIO DE AUDITORIA */}
           <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100 space-y-8">
-            <div className="flex justify-between items-center mb-2"><h2 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] flex items-center gap-2"><LayoutGrid size={16} /> Audit Foundation</h2><div className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-1 border ${form.milestones.some(m => m.date === todayStr && !m.isPaid) ? 'bg-amber-100 text-amber-700 border-amber-200 animate-pulse' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}><Ship size={14} /> ETD: {shipmentDate}</div></div>
+            <div className="flex justify-between items-center mb-2"><h2 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] flex items-center gap-2"><LayoutGrid size={16} /> Audit Core</h2><div className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-1 border ${form.milestones.some(m => m.date === todayStr && !m.isPaid) ? 'bg-amber-100 text-amber-700 border-amber-200 animate-pulse' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}><Ship size={14} /> ETD: {shipmentDate}</div></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
-                <div><label className="text-[9px] font-black text-slate-400 uppercase block">Exportador / Fornecedor</label><input type="text" value={form.supplierName} onChange={(e) => setForm(p => ({ ...p, supplierName: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black uppercase border-none" /></div>
+                <div><label className="text-[9px] font-black text-slate-400 uppercase block">Exportador</label><input type="text" value={form.supplierName} onChange={(e) => setForm(p => ({ ...p, supplierName: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black uppercase border-none" /></div>
                 <div className="grid grid-cols-2 gap-4">
                   <div><label className="text-[9px] font-black text-slate-400 uppercase block">Data Pedido</label><input type="date" value={form.orderDate} onChange={(e) => setForm(p => ({ ...p, orderDate: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black border-none" /></div>
                   <div><label className="text-[9px] font-black text-slate-400 uppercase block">Lead Time</label><input type="number" value={form.productionDays} onChange={(e) => setForm(p => ({ ...p, productionDays: Number(e.target.value) }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black border-none" /></div>
@@ -250,47 +242,27 @@ export default function SupplierPayments({ data, onUpdate }: any) {
                   <div><label className="text-[9px] font-black text-slate-400 uppercase block">Ref CI</label><input type="text" value={form.ciNumber} onChange={(e) => setForm(p => ({ ...p, ciNumber: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black uppercase border-none" /></div>
                   <div><label className="text-[9px] font-black text-slate-400 uppercase block">Container</label><input type="text" value={form.containerNumber} onChange={(e) => setForm(p => ({ ...p, containerNumber: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black uppercase border-none" /></div>
                 </div>
-                <div><label className="text-[9px] font-black text-slate-400 uppercase block">Total USD $</label><input type="number" value={form.contractTotal} onChange={(e) => setForm(p => ({ ...p, contractTotal: Number(e.target.value) }))} className="w-full p-4 bg-slate-900 text-emerald-400 rounded-2xl text-[16px] font-black font-mono-technical border-none" /></div>
+                <div><label className="text-[9px] font-black text-slate-400 uppercase block">Total USD $</label><input type="number" value={form.contractTotal} onChange={(e) => setForm(p => ({ ...p, contractTotal: Number(e.target.value) }))} className="w-full p-4 bg-slate-900 text-emerald-400 rounded-2xl text-[16px] font-black font-mono-technical border-none shadow-inner" /></div>
               </div>
             </div>
-            <div className="pt-6 border-t border-slate-100 flex gap-4"><div className="flex-1"><label className="text-[9px] font-black text-purple-600 uppercase block">Condição de Pagamento</label><input type="text" value={form.paymentTerms} onChange={(e) => setForm(p => ({ ...p, paymentTerms: e.target.value }))} className="w-full p-4 bg-purple-50 rounded-2xl text-[12px] font-black text-purple-900 border-none outline-none" /></div><button onClick={applyPaymentTerms} className="mt-5 px-6 bg-purple-600 text-white rounded-2xl text-[10px] font-black uppercase shadow-lg"><RefreshCw size={16}/></button></div>
-            <div className="pt-6 border-t border-slate-100"><h2 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Landmark size={16} /> Dados Bancários</h2><textarea value={form.bankDetails} onChange={(e) => setForm(p => ({ ...p, bankDetails: e.target.value }))} className="w-full h-24 p-4 bg-slate-50 rounded-2xl text-[10px] font-bold text-slate-600 border-none resize-none font-mono" /></div>
+            <div className="pt-6 border-t border-slate-100 flex gap-4"><div className="flex-1"><label className="text-[9px] font-black text-purple-600 uppercase block">Preset de Pagamento</label><input type="text" value={form.paymentTerms} onChange={(e) => setForm(p => ({ ...p, paymentTerms: e.target.value }))} className="w-full p-4 bg-purple-50 rounded-2xl text-[12px] font-black text-purple-900 border-none outline-none" placeholder="Ex: 30/70" /></div><button onClick={applyPaymentTerms} className="mt-5 px-6 bg-purple-600 text-white rounded-2xl text-[10px] font-black uppercase"><RefreshCw size={16}/></button></div>
+            <div className="pt-6 border-t border-slate-100"><h2 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Landmark size={16} /> Banco</h2><textarea value={form.bankDetails} onChange={(e) => setForm(p => ({ ...p, bankDetails: e.target.value }))} className="w-full h-24 p-4 bg-slate-50 rounded-2xl text-[10px] font-bold text-slate-600 border-none resize-none font-mono shadow-inner" /></div>
           </div>
 
-          {/* MILESTONES */}
-          <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100"><div className="flex justify-between items-center mb-6"><h2 className="text-[12px] font-black text-slate-800 uppercase tracking-widest">Cronograma Financeiro</h2><button onClick={addMilestone} className="px-5 py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg">+ Add</button></div><div className="space-y-4">{form.milestones.map((m: Milestone) => (<div key={m.id} className={`p-4 rounded-[28px] border transition-all ${m.date === todayStr ? 'bg-amber-50 border-amber-500 shadow-lg' : 'bg-slate-50 border-slate-100'}`}><div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end"><div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">Fase</label><input type="text" value={m.description} onChange={(e) => updateMilestone(m.id, { description: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black uppercase outline-none" /></div><div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">Vencimento</label><input type="date" value={m.date} onChange={(e) => updateMilestone(m.id, { date: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black outline-none" /></div><div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">USD $</label><input type="number" value={m.amount} onChange={(e) => updateMilestone(m.id, { amount: Number(e.target.value) })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[11px] font-black outline-none" /></div><div className="flex gap-2"><button onClick={() => updateMilestone(m.id, { isPaid: !m.isPaid })} className={`flex-1 p-2 rounded-lg text-[9px] font-black uppercase transition-all ${m.isPaid ? 'bg-emerald-500 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>{m.isPaid ? 'PAGO' : 'PEND'}</button><button onClick={() => removeMilestone(m.id)} className="w-10 h-10 bg-red-50 text-red-400 rounded-lg flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button></div></div></div>))}</div></div>
+          <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100"><div className="flex justify-between items-center mb-6"><h2 className="text-[12px] font-black text-slate-800 uppercase tracking-widest">Cronograma de Parcelas</h2><button onClick={addMilestone} className="px-5 py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-blue-100">+ Add</button></div><div className="space-y-4">{form.milestones.map((m: Milestone) => (<div key={m.id} className={`p-4 rounded-[28px] border transition-all ${m.date === todayStr ? 'bg-amber-50 border-amber-500 shadow-lg' : 'bg-slate-50 border-slate-100'}`}><div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end"><div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">Fase ({((m.amount/(form.contractTotal||1))*100).toFixed(0)}%)</label><input type="text" value={m.description} onChange={(e) => updateMilestone(m.id, { description: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black uppercase outline-none" /></div><div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">{m.date === todayStr ? '⚠️ VENCE HOJE' : 'Vencimento'}</label><input type="date" value={m.date} onChange={(e) => updateMilestone(m.id, { date: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black outline-none" /></div><div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">USD $</label><input type="number" value={m.amount} onChange={(e) => updateMilestone(m.id, { amount: Number(e.target.value) })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[11px] font-black outline-none" /></div><div className="flex gap-2"><button onClick={() => updateMilestone(m.id, { isPaid: !m.isPaid })} className={`flex-1 p-2 rounded-lg text-[9px] font-black uppercase transition-all shadow-sm ${m.isPaid ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white text-slate-400 border border-slate-100'}`}>{m.isPaid ? 'PAGO' : 'PEND'}</button><button onClick={() => removeMilestone(m.id)} className="w-10 h-10 bg-red-50 text-red-400 rounded-lg flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm"><Trash2 size={16}/></button></div></div></div>))}</div></div>
         </div>
 
         <div className="lg:col-span-4 space-y-8">
-          <div className="p-8 bg-white rounded-[40px] shadow-sm border border-slate-100"><h3 className="text-[11px] font-black text-slate-800 mb-6 flex items-center gap-2 uppercase"><Calculator size={18} /> Resumo Gerencial</h3><div className="space-y-6"><div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100"><p className="text-[9px] text-slate-400 uppercase font-black mb-1">Taxa: R$ {form.exchangeRate.toFixed(4)}</p><p className="text-xl font-black text-slate-900 font-mono-technical">R$ {(form.contractTotal * form.exchangeRate).toLocaleString('pt-BR')}</p><p className="text-[10px] text-slate-400 uppercase font-black mt-4 mb-1">Total em Aberto</p><p className="text-2xl font-black text-red-600 font-mono-technical">$ {balanceDue.toLocaleString('pt-BR')}</p></div><div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full transition-all duration-1000" style={{ width: `${(totalPaid / (form.contractTotal || 1)) * 100}%` }}></div></div></div></div>
+          <div className="calculation-box p-8 bg-white rounded-[40px] shadow-sm border border-slate-100"><h3 className="text-[11px] font-black uppercase text-slate-800 border-b border-slate-100 pb-4 flex items-center gap-2"><Calculator size={18} /> Resumo Gerencial</h3><div className="space-y-6"><div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100"><p className="text-[9px] text-slate-400 uppercase font-black mb-1">Câmbio: R$ {form.exchangeRate.toFixed(4)}</p><p className="text-xl font-black text-slate-900 font-mono-technical">R$ {(form.contractTotal * form.exchangeRate).toLocaleString('pt-BR')}</p><p className="text-[10px] text-slate-400 uppercase font-black mt-4 mb-1">Total em Aberto</p><p className="text-2xl font-black text-red-600 font-mono-technical">$ {balanceDue.toLocaleString('pt-BR')}</p></div><div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full transition-all duration-1000 shadow-xl" style={{ width: `${(totalPaid / (form.contractTotal || 1)) * 100}%` }}></div></div></div></div>
           
           <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><History size={16} className="text-blue-500" /> Histórico Global</h3>
-              <button onClick={clearAllHistory} className="w-8 h-8 bg-red-50 text-red-400 rounded-lg flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm"><Eraser size={14}/></button>
-            </div>
-            <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
-              {history.map((h: any) => {
-                const isSelected = selectedIds.includes(h.id);
-                return (
-                  <div key={h.id} className="flex items-center gap-2 group">
-                    <div onClick={() => setSelectedIds(prev => prev.includes(h.id) ? prev.filter(id => id !== h.id) : [...prev, h.id])} className={`w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer transition-all ${isSelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>{isSelected ? <CheckSquare size={14}/> : <Square size={14}/>}</div>
-                    <div onClick={() => setForm({ ...h.data })} className={`flex-1 p-4 rounded-2xl border transition-all cursor-pointer ${isSelected ? 'bg-blue-50 border-blue-400' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}>
-                      <p className="text-[10px] font-black text-slate-900 uppercase truncate">{h.data?.ciNumber || "N/A"}</p>
-                      <p className="text-[9px] font-bold text-slate-500 truncate">{h.data?.supplierName}</p>
-                      <p className="text-[11px] font-mono-technical font-black text-blue-600 mt-1">$ {Number(h.data?.contractTotal || 0).toLocaleString('pt-BR')}</p>
-                    </div>
-                    <button onClick={() => deleteHistoryRecord(h.id)} className="w-8 h-8 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button>
-                  </div>
-                );
-              })}
-              {history.length === 0 && <div className="text-center py-10"><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Nenhum Registro</p></div>}
-            </div>
+            <div className="flex justify-between items-center mb-6"><h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><History size={16} className="text-blue-500" /> Histórico</h3><button onClick={clearAllHistory} className="w-8 h-8 bg-red-50 text-red-400 rounded-lg flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"><Eraser size={14}/></button></div>
+            <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">{history.map((h: any) => (<div key={h.id} className="flex items-center gap-2 group"><div onClick={() => setSelectedIds(prev => prev.includes(h.id) ? prev.filter(id => id !== h.id) : [...prev, h.id])} className={`w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer transition-all ${selectedIds.includes(h.id) ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>{selectedIds.includes(h.id) ? <CheckSquare size={14}/> : <Square size={14}/>}</div><div onClick={() => setForm({ ...h.data })} className={`flex-1 p-4 rounded-2xl border transition-all cursor-pointer ${selectedIds.includes(h.id) ? 'bg-blue-50 border-blue-400' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}><p className="text-[10px] font-black text-slate-900 uppercase truncate">{h.data?.ciNumber || "N/A"}</p><p className="text-[9px] font-bold text-slate-500 truncate">{h.data?.supplierName}</p></div><button onClick={() => setHistory(history.filter(x => x.id !== h.id))} className="w-8 h-8 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button></div>))}</div>
           </div>
         </div>
       </div>
 
-      {showMsg && (<div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-6"><div className="bg-white rounded-[48px] shadow-2xl w-full max-w-2xl overflow-hidden"><div className="bg-emerald-600 p-8 text-white flex justify-between items-center font-black uppercase tracking-tight">Executive Messenger <button onClick={() => setShowMsg(false)} className="text-2xl font-light">×</button></div><div className="p-8 bg-slate-50"><textarea value={whatsappText} onChange={(e) => setWhatsappText(e.target.value)} className="w-full h-[450px] p-6 bg-slate-900 text-emerald-400 font-mono text-[11px] rounded-[32px] border-none outline-none resize-none" /><div className="flex gap-4 mt-6"><button onClick={() => { navigator.clipboard.writeText(whatsappText); toast.success("Copiado."); }} className="flex-1 py-5 bg-slate-900 text-white rounded-[24px] text-[10px] font-black uppercase">Copy</button><a href={`https://wa.me/?text=${encodeURIComponent(whatsappText)}`} target="_blank" rel="noopener noreferrer" className="flex-1 py-5 bg-emerald-600 text-white rounded-[24px] text-[10px] font-black uppercase text-center">Send</a></div></div></div></div>)}
+      {showMsg && (<div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-6"><div className="bg-white rounded-[48px] shadow-2xl w-full max-w-2xl overflow-hidden"><div className="bg-emerald-600 p-8 text-white flex justify-between items-center font-black uppercase tracking-tight">Executive Messenger <button onClick={() => setShowMsg(false)} className="text-2xl font-light">×</button></div><div className="p-8 bg-slate-50"><textarea value={whatsappText} onChange={(e) => setWhatsappText(e.target.value)} className="w-full h-[450px] p-6 bg-slate-900 text-emerald-400 font-mono text-[11px] rounded-[32px] border-none outline-none resize-none shadow-inner" /><div className="flex gap-4 mt-6"><button onClick={() => { navigator.clipboard.writeText(whatsappText); toast.success("Copiado."); }} className="flex-1 py-5 bg-slate-900 text-white rounded-[24px] text-[10px] font-black uppercase">Copy</button><a href={`https://wa.me/?text=${encodeURIComponent(whatsappText)}`} target="_blank" rel="noopener noreferrer" className="flex-1 py-5 bg-emerald-600 text-white rounded-[24px] text-[10px] font-black uppercase text-center">Send</a></div></div></div></div>)}
     </div>
   );
 }
