@@ -161,15 +161,108 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   };
 
   const exportStatusPDF = () => {
+    const selectedRecords = history.filter(h => selectedIds.includes(h.id));
+    if (selectedRecords.length === 0) {
+      toast.error("Selecione ao menos um item no histórico para exportar.");
+      return;
+    }
+
     const doc = new jsPDF() as any;
     const pw = doc.internal.pageSize.width;
-    if (companyLogo) { try { doc.addImage(companyLogo, 'PNG', pw/2 - 15, 10, 30, 15); } catch(e){} }
-    doc.setFontSize(22); doc.text("Status Report", pw/2, 40, { align: 'center' });
-    if (form.productImage) { try { doc.addImage(form.productImage, 'JPEG', pw - 70, 60, 50, 50); } catch(e){} }
-    doc.setFontSize(10); doc.text(`SUPPLIER: ${form.supplierName}`, 20, 65);
-    const table = form.milestones.map(m => [new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR'), m.description, m.isPaid ? 'PAID' : 'DUE', `$ ${m.amount.toLocaleString('en-US')}`]);
-    autoTable(doc, { startY: 120, head: [['DATE', 'PHASE', 'STATUS', 'USD']], body: table });
-    doc.save(`Status_${form.ciNumber}.pdf`);
+    let y = 20;
+
+    // Cabeçalho Principal (Apenas na primeira página)
+    if (companyLogo) {
+      try { doc.addImage(companyLogo, 'PNG', pw/2 - 20, y, 40, 20); y += 25; } catch(e){}
+    }
+    
+    doc.setFontSize(22);
+    doc.setTextColor(15, 23, 42); // Slate 900
+    doc.setFont("helvetica", "bold");
+    doc.text("RELATÓRIO DE STATUS FINANCEIRO", pw/2, y, { align: 'center' });
+    y += 10;
+    
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100);
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pw/2, y, { align: 'center' });
+    y += 15;
+
+    selectedRecords.forEach((record, index) => {
+      const f = record.data;
+      if (index > 0) { doc.addPage(); y = 20; }
+
+      // Banner do Fornecedor
+      doc.setFillColor(248, 250, 252); // bg-slate-50
+      doc.rect(15, y, pw - 30, 45, 'F');
+      
+      // Foto do Produto (Snapshot)
+      if (f.productImage) {
+        try { 
+          doc.addImage(f.productImage, 'JPEG', 20, y + 5, 35, 35); 
+        } catch(e){
+          doc.setDrawColor(200); doc.rect(20, y + 5, 35, 35);
+          doc.text("SEM FOTO", 37.5, y + 22.5, { align: 'center' });
+        }
+      }
+
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text(f.supplierName?.toUpperCase() || "FORNECEDOR N/I", 65, y + 15);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(71, 85, 105); // Slate 600
+      doc.text(`Ref. Invoice (CI): ${f.ciNumber || "N/E"}`, 65, y + 22);
+      doc.text(`Containers: ${f.containerNumber || "N/E"}`, 65, y + 28);
+      
+      // Resumo Financeiro do Card
+      const totalPaid = (f.milestones || []).filter((m: any) => m.isPaid).reduce((acc: number, cur: any) => acc + Number(cur.amount), 0);
+      const totalPending = Number(f.contractTotal || 0) - totalPaid;
+      
+      doc.setFontSize(9);
+      doc.text(`TOTAL: $ ${Number(f.contractTotal || 0).toLocaleString('en-US')}`, 65, y + 36);
+      doc.setTextColor(16, 185, 129); // Emerald 500
+      doc.text(`PAGO: $ ${totalPaid.toLocaleString('en-US')}`, 105, y + 36);
+      doc.setTextColor(244, 63, 94); // Rose 500
+      doc.text(`PENDENTE: $ ${totalPending.toLocaleString('en-US')}`, 145, y + 36);
+
+      y += 55;
+
+      // Tabela de Milestones
+      const tableData = (f.milestones || []).map((m: any) => [
+        new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR'),
+        m.description?.toUpperCase(),
+        m.isPaid ? 'LIQUIDADO' : 'PENDENTE',
+        `${m.percentage}%`,
+        `$ ${Number(m.amount).toLocaleString('en-US')}`
+      ]);
+
+      autoTable(doc, {
+        startY: y,
+        head: [['VENCIMENTO', 'FASE/DESCRIÇÃO', 'STATUS', '%', 'VALOR USD']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 8 },
+        columnStyles: {
+          2: { fontStyle: 'bold' },
+          4: { halign: 'right', fontStyle: 'bold' }
+        },
+        didDrawCell: (data) => {
+          if (data.section === 'body' && data.column.index === 2) {
+            const status = data.cell.raw;
+            if (status === 'LIQUIDADO') doc.setTextColor(16, 185, 129);
+            else doc.setTextColor(244, 63, 94);
+          }
+        }
+      });
+
+      y = (doc as any).lastAutoTable.finalY + 20;
+    });
+
+    doc.save(`Status_Report_${new Date().getTime()}.pdf`);
+    toast.success("Relatório Premium gerado com sucesso!");
   };
 
   // DROPZONES (NO TOPO)
