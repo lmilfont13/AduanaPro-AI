@@ -93,7 +93,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       if (idx > 0) d.setDate(d.getDate() + (form.productionDays));
       return {
         id: Math.random().toString(36).substring(2, 9),
-        description: idx === 0 ? "Advance Payment" : `Milestone ${idx + 1}`,
+        description: idx === 0 ? "Advance" : `Milestone ${idx + 1}`,
         percentage: pct,
         amount: (form.contractTotal * pct) / 100,
         isPaid: false,
@@ -101,7 +101,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       };
     });
     setForm(prev => ({ ...prev, milestones: newMilestones }));
-    toast.success("Cálculo Gerencial Aplicado!");
+    toast.success("Cálculo Gerencial OK!");
   };
 
   useEffect(() => {
@@ -124,7 +124,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   const [whatsappText, setWhatsappText] = useState("");
 
   const addMilestone = () => {
-    const newM: Milestone = { id: Math.random().toString(36).substring(2, 9), description: "Manual Milestone", percentage: 0, amount: 0, isPaid: false, date: new Date().toISOString().split('T')[0] };
+    const newM: Milestone = { id: Math.random().toString(36).substring(2, 9), description: "New Milestone", percentage: 0, amount: 0, isPaid: false, date: new Date().toISOString().split('T')[0] };
     setForm(prev => ({ ...prev, milestones: [...prev.milestones, newM] }));
   };
 
@@ -144,90 +144,30 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(newHistory));
       if (IS_SUPABASE_CONFIGURED) {
         await supabase.from('supplier_payments').upsert({ id: recordId, supplier_name: form.supplierName, ci_number: form.ciNumber, contract_total: form.contractTotal, data: dataToSave, updated_at: new Date().toISOString() });
-        toast.success("Cloud Audit Ready!");
+        toast.success("Audit Sincronizado!");
       }
-    } catch (e) { toast.error("Audit Save Failed."); } finally { setLoading(false); }
+    } catch (e) { toast.error("Erro no salvamento."); } finally { setLoading(false); }
   };
 
   const deleteHistoryRecord = (id: string) => {
     const newHistory = history.filter(h => h.id !== id);
     setHistory(newHistory);
     localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(newHistory));
-    toast.success("Record Deleted.");
+    toast.success("Deletado.");
   };
 
-  const loadFromHistory = (h: any) => { setForm({ ...h.data }); toast.info(`Loaded Audit: ${h.data.ciNumber}`); };
+  const loadFromHistory = (h: any) => { setForm({ ...h.data }); toast.info(`Carregado Audit: ${h.data.ciNumber}`); };
 
-  // EXPORT INDIVIDUAL PDF (MICHELIN LEVEL)
   const exportIndividualPDF = () => {
     const doc = new jsPDF() as any;
     const pageWidth = doc.internal.pageSize.width;
-    
-    // Luxury Header
     doc.setFillColor(15, 23, 42); doc.rect(0, 0, pageWidth, 45, 'F');
     doc.setTextColor(255, 255, 255); doc.setFontSize(22); doc.setFont("helvetica", "bold");
     doc.text("FINANCIAL MANAGEMENT REPORT", 20, 25);
-    doc.setFontSize(10); doc.setFont("helvetica", "normal");
-    doc.text(`REFERENCE: ${form.ciNumber} | EMISSION: ${new Date().toLocaleString()}`, 20, 32);
-
-    // Image Signature
-    if (form.productImage) {
-      try { doc.addImage(form.productImage, 'JPEG', pageWidth - 50, 8, 30, 30); } catch (e) {}
-    }
-
-    // Sections
-    let currentY = 55;
-    const drawSection = (title: string, y: number) => {
-      doc.setFillColor(241, 245, 249); doc.rect(20, y, pageWidth - 40, 7, 'F');
-      doc.setTextColor(51, 65, 85); doc.setFontSize(8); doc.setFont("helvetica", "bold");
-      doc.text(title.toUpperCase(), 25, y + 5);
-      return y + 12;
-    };
-
-    currentY = drawSection("Supplier Information", currentY);
-    doc.setTextColor(15, 23, 42); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-    doc.text(`NAME: ${form.supplierName}`, 20, currentY);
-    doc.setFont("helvetica", "normal"); doc.text(`PRODUCT: ${form.productName || "N/I"}`, 20, currentY + 6);
-    doc.text(`CONTAINER: ${form.containerNumber}`, 20, currentY + 12);
-
-    doc.setFont("helvetica", "bold"); doc.text("LOGISTICS", 120, currentY);
-    doc.setFont("helvetica", "normal"); doc.text(`ORDER DATE: ${new Date(form.orderDate).toLocaleDateString()}`, 120, currentY + 6);
-    doc.text(`EST. SHIPMENT: ${shipmentDate}`, 120, currentY + 12);
-
-    currentY += 22;
-    currentY = drawSection("Payment Schedule & Milestones", currentY);
-
-    const tableData = form.milestones.map(m => [
-      new Date(m.date + 'T12:00:00').toLocaleDateString(),
-      m.description,
-      `$ ${m.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      m.isPaid ? "LIQUIDATED" : "PENDING"
-    ]);
-
-    autoTable(doc, {
-      startY: currentY,
-      head: [['DUE DATE', 'DESCRIPTION', 'AMOUNT (USD)', 'STATUS']],
-      body: tableData,
-      theme: 'grid',
-      headStyles: { fillStyle: [15, 23, 42], fontSize: 8 },
-      styles: { fontSize: 8 }
-    });
-
-    currentY = (doc as any).lastAutoTable.finalY + 10;
-    currentY = drawSection("Bank & Beneficiary Details", currentY);
-    doc.setTextColor(51, 65, 85); doc.setFontSize(8); doc.setFont("courier", "normal");
-    const bankLines = doc.splitTextToSize(form.bankDetails || "NO BANK DETAILS PROVIDED", pageWidth - 50);
-    doc.text(bankLines, 20, currentY + 5);
-
-    currentY += (bankLines.length * 4) + 10;
-    doc.setFillColor(15, 23, 42); doc.rect(pageWidth - 90, currentY, 70, 25, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-    doc.text("BALANCE SUMMARY", pageWidth - 85, currentY + 8);
-    doc.setFontSize(11);
-    doc.text(`DUE: $ ${balanceDue.toLocaleString('pt-BR')}`, pageWidth - 85, currentY + 18);
-
+    if (form.productImage) try { doc.addImage(form.productImage, 'JPEG', pageWidth - 50, 8, 30, 30); } catch (e) {}
+    const tableData = form.milestones.map(m => [new Date(m.date + 'T12:00:00').toLocaleDateString(), m.description, `$ ${m.amount.toLocaleString('pt-BR')}`, m.isPaid ? "PAID" : "PENDING"]);
+    autoTable(doc, { startY: 60, head: [['DATE', 'PHASE', 'VALUE USD $', 'STATUS']], body: tableData, theme: 'grid' });
     doc.save(`Audit_${form.ciNumber}.pdf`);
-    toast.success("Executive Audit Generated!");
   };
 
   const exportConsolidatedPDF = () => {
@@ -236,49 +176,39 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     const pageWidth = doc.internal.pageSize.width;
     doc.setFillColor(15, 23, 42); doc.rect(0, 0, pageWidth, 40, 'F');
     doc.setTextColor(255, 255, 255); doc.setFontSize(18); doc.text("GLOBAL CASH FLOW AUDIT", 20, 25);
-    
     let allMilestones: any[] = [];
     history.forEach(h => {
       const ms = Array.isArray(h.data?.milestones) ? h.data.milestones : [];
-      ms.forEach((m: any) => { allMilestones.push({ ...m, supplier: h.data.supplierName, ref: h.data.ciNumber, image: h.data.productImage }); });
+      ms.forEach((m: any) => { allMilestones.push({ ...m, supplier: h.data.supplierName, ref: h.data.ciNumber }); });
     });
     allMilestones.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    const tableData = allMilestones.map(m => [
-      new Date(m.date + 'T12:00:00').toLocaleDateString(),
-      m.supplier.substring(0, 15),
-      m.ref,
-      m.description.substring(0, 15),
-      `$ ${m.amount.toLocaleString('pt-BR')}`,
-      m.isPaid ? "OK" : "PEND"
-    ]);
-
-    autoTable(doc, { 
-      startY: 50, 
-      head: [['DATE', 'SUPPLIER', 'REF', 'PHASE', 'USD $', 'STATUS']], 
-      body: tableData, 
-      theme: 'grid',
-      headStyles: { fillStyle: [15, 23, 42], fontSize: 7 },
-      styles: { fontSize: 7 }
-    });
-    
-    doc.save("Consolidated_Flow_Report.pdf");
+    const tableData = allMilestones.map(m => [new Date(m.date + 'T12:00:00').toLocaleDateString(), m.supplier.substring(0, 15), m.ref, m.description.substring(0, 15), `$ ${m.amount.toLocaleString('pt-BR')}`, m.isPaid ? "OK" : "PEND"]);
+    autoTable(doc, { startY: 50, head: [['DATE', 'SUPPLIER', 'REF', 'PHASE', 'VALUE $', 'STATUS']], body: tableData, theme: 'grid' });
+    doc.save("Global_Flow_Report.pdf");
   };
 
   const shareWhatsApp = () => {
+    const hasToday = form.milestones.some(m => m.date === todayStr && !m.isPaid);
     const cleanTag = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, '');
     const refTag = cleanTag(form.ciNumber) || "S_Ref";
     const bankLines = form.bankDetails.split('\n').filter(l => l.trim());
     const compactBank = bankLines.slice(0, 4).join(' | ');
-    let text = `💼 *SOLICITAÇÃO DE PAGAMENTO*\n${form.supplierName}\n\n${form.recipientName}, bom dia! 🏦 Segue formalização:\n\n📄 *DADOS:* ${form.ciNumber}\n📦 *CONTAINER:* ${form.containerNumber}\n🚢 *EMBARQUE:* ${shipmentDate}\n\n💰 *FINANCEIRO:*` + "```" + `\nTOTAL: $ ${form.contractTotal.toLocaleString('pt-BR')}\nTAXA:  R$ ${form.exchangeRate.toFixed(4)}\nEST. BRL: R$ ${(form.contractTotal * form.exchangeRate).toLocaleString('pt-BR')}\n` + "```" + `\n\n`;
+
+    const title = hasToday ? `🚨 *URGENTE: SOLICITAÇÃO DE PAGAMENTO PARA HOJE* 🚨` : `💼 *SOLICITAÇÃO DE PAGAMENTO*`;
+    
+    let text = `${title}\n${form.supplierName}\n\n${form.recipientName}, bom dia! 🏦 Segue formalização:\n\n📄 *DADOS:* ${form.ciNumber}\n📦 *CONTAINER:* ${form.containerNumber}\n🚢 *EMBARQUE:* ${shipmentDate}\n\n💰 *RESUMO FINANCEIRO:*` + "```" + `\nTOTAL: $ ${form.contractTotal.toLocaleString('pt-BR')}\nTAXA:  R$ ${form.exchangeRate.toFixed(4)}\nTOTAL EST. BRL: R$ ${(form.contractTotal * form.exchangeRate).toLocaleString('pt-BR')}\n` + "```" + `\n\n`;
+    
     if (form.milestones.length > 0) {
-      text += `📅 *PARCELAS ($ | R$):*` + "```" + `\n` + form.milestones.map(m => {
+      text += `📅 *PARCELAS (% | USD $ | BRL Est.):*` + "```" + `\n` + form.milestones.map(m => {
         const dt = new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR').substring(0, 5);
+        const pct = ((m.amount / (form.contractTotal || 1)) * 100).toFixed(0).padStart(2, ' ') + '%';
         const valUsd = `$ ${m.amount.toLocaleString('pt-BR')}`.padStart(10, ' ');
         const valBrl = `R$ ${(m.amount * form.exchangeRate).toLocaleString('pt-BR')}`.padStart(12, ' ');
-        return `${dt} | ${valUsd} | ${valBrl}`;
+        const isToday = m.date === todayStr ? '⚠️' : (m.isPaid ? '✓' : ' ');
+        return `${dt} | ${pct} | ${valUsd} | ${valBrl} ${isToday}`;
       }).join('\n') + "```" + `\n\n`;
     }
+    
     text += `🏦 *BANCO:* ${compactBank.substring(0, 180)}...\n\n🤝 #Pg_${refTag}`;
     setWhatsappText(text); setShowMsg(true);
   };
@@ -299,8 +229,8 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         <div className="flex gap-2 flex-wrap">
           <button onClick={saveRecord} className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-slate-800 transition-all flex items-center gap-2 shadow-xl shadow-slate-100"><Save size={18}/> Salvar</button>
           <button onClick={exportConsolidatedPDF} className="px-6 py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-100"><BarChart3 size={18}/> Fluxo Global</button>
-          <button onClick={exportIndividualPDF} className="px-6 py-4 bg-white text-slate-900 border border-slate-200 rounded-2xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"><Download size={18}/> PDF CI</button>
-          <button onClick={shareWhatsApp} className="px-6 py-4 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-emerald-600 flex items-center gap-2 shadow-xl shadow-emerald-100"><MessageSquare size={18}/> WhatsApp</button>
+          <button onClick={exportIndividualPDF} className="px-6 py-4 bg-white text-slate-900 border border-slate-200 rounded-2xl text-[10px] font-black uppercase hover:bg-slate-50 flex items-center gap-2 shadow-sm"><Download size={18}/> PDF CI</button>
+          <button onClick={shareWhatsApp} className="px-6 py-4 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-xl shadow-emerald-100"><MessageSquare size={18}/> WhatsApp</button>
         </div>
       </div>
 
@@ -312,8 +242,8 @@ export default function SupplierPayments({ data, onUpdate }: any) {
               <div {...getBankRoot()} className="w-full h-32 border-2 border-dashed border-slate-200 rounded-[24px] flex flex-col items-center justify-center cursor-pointer overflow-hidden group"><input {...getBankInput()} />{form.bankImage ? <img src={form.bankImage} className="w-full h-full object-cover" /> : <div className="text-center"><FileDown className="mx-auto text-slate-300 mb-2" size={24}/><p className="text-[9px] font-black text-slate-400 uppercase">Audit Invoice</p></div>}</div>
             </div>
             <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 space-y-4">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ImageIcon size={14} className="text-emerald-500" /> Product Reference</h3>
-              <div {...getProductRoot()} className="w-full h-32 border-2 border-dashed border-slate-200 rounded-[24px] flex flex-col items-center justify-center cursor-pointer overflow-hidden group"><input {...getProductInput()} />{form.productImage ? <img src={form.productImage} className="w-full h-full object-cover" /> : <div className="text-center"><Zap className="mx-auto text-slate-300 mb-2" size={24}/><p className="text-[9px] font-black text-slate-400 uppercase">Snapshot</p></div>}</div>
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ImageIcon size={14} className="text-emerald-500" /> Snapshot Produto</h3>
+              <div {...getProductRoot()} className="w-full h-32 border-2 border-dashed border-slate-200 rounded-[24px] flex flex-col items-center justify-center cursor-pointer overflow-hidden group"><input {...getProductInput()} />{form.productImage ? <img src={form.productImage} className="w-full h-full object-cover" /> : <div className="text-center"><Zap className="mx-auto text-slate-300 mb-2" size={24}/><p className="text-[9px] font-black text-slate-400 uppercase">Product Image</p></div>}</div>
             </div>
           </div>
 
@@ -345,7 +275,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
               <div key={m.id} className={`p-4 rounded-[28px] border transition-all ${isToday ? 'bg-amber-50 border-amber-500 shadow-lg shadow-amber-100/50 animate-pulse' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                   <div className="space-y-1">
-                    <label className="text-[8px] font-black text-slate-400 uppercase flex items-center gap-1">{isToday && <AlertCircle size={10} className="text-amber-500" />} Payment Phase</label>
+                    <label className="text-[8px] font-black text-slate-400 uppercase flex items-center gap-1">{isToday && <AlertCircle size={10} className="text-amber-500" />} Phase (%): {((m.amount/(form.contractTotal||1))*100).toFixed(0)}%</label>
                     <input type="text" value={m.description} onChange={(e) => updateMilestone(m.id, { description: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black uppercase outline-none" />
                   </div>
                   <div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">Due Date</label><input type="date" value={m.date} onChange={(e) => updateMilestone(m.id, { date: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black" /></div>
@@ -361,8 +291,8 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         </div>
 
         <div className="lg:col-span-4 space-y-8">
-          <div className="calculation-box p-8 shadow-xl shadow-emerald-100 border border-green-200/50"><h3 className="text-[11px] font-black uppercase text-green-900 border-b border-green-200/50 pb-4 flex items-center gap-2"><Calculator size={18} /> Executive Summary</h3><div className="space-y-6"><div className="p-6 bg-white/40 rounded-[32px] border border-green-200/50"><p className="text-[9px] opacity-60 uppercase font-black mb-1">Câmbio R$ {form.exchangeRate.toFixed(4)}</p><p className="text-xl font-black text-green-900 font-mono-technical">R$ {(form.contractTotal * form.exchangeRate).toLocaleString('pt-BR')}</p><p className="text-[10px] opacity-60 uppercase font-black mt-4 mb-1">Global Debt</p><p className="text-2xl font-black text-green-900 font-mono-technical">$ {balanceDue.toLocaleString('pt-BR')}</p></div><div className="w-full h-3 bg-white/50 rounded-full overflow-hidden p-0.5"><div className="h-full bg-green-600 rounded-full transition-all duration-1000 shadow-xl" style={{ width: `${(totalPaid / (form.contractTotal || 1)) * 100}%` }}></div></div></div></div>
-          <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm"><h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest mb-6 flex items-center gap-2"><History size={16} className="text-blue-500" /> Global Records</h3><div className="space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">{history.map((h: any) => (<div key={h.id} onClick={() => loadFromHistory(h)} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-blue-400 hover:bg-white transition-all group relative cursor-pointer"><button onClick={(e) => { e.stopPropagation(); deleteHistoryRecord(h.id); }} className="absolute top-2 right-2 w-6 h-6 bg-red-50 text-red-400 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"><X size={12}/></button><p className="text-[10px] font-black text-slate-900 uppercase truncate">{h.data?.ciNumber || "S/ REF"}</p><p className="text-[9px] font-bold text-slate-500 truncate">{h.data?.supplierName}</p><p className="text-[11px] font-mono-technical font-black text-blue-600 mt-1">$ {Number(h.data?.contractTotal || 0).toLocaleString('pt-BR')}</p></div>))}</div></div>
+          <div className="calculation-box p-8 shadow-xl shadow-emerald-100 border border-green-200/50"><h3 className="text-[11px] font-black uppercase text-green-900 border-b border-green-200/50 pb-4 flex items-center gap-2"><Calculator size={18} /> Executive Summary</h3><div className="space-y-6"><div className="p-6 bg-white/40 rounded-[32px] border border-green-200/50"><p className="text-[9px] opacity-60 uppercase font-black mb-1">Câmbio R$ {form.exchangeRate.toFixed(4)}</p><p className="text-xl font-black text-green-900 font-mono-technical">R$ {(form.contractTotal * form.exchangeRate).toLocaleString('pt-BR')}</p><p className="text-[10px] opacity-60 uppercase font-black mt-4 mb-1">Total Open Debt</p><p className="text-2xl font-black text-green-900 font-mono-technical">$ {balanceDue.toLocaleString('pt-BR')}</p></div><div className="w-full h-3 bg-white/50 rounded-full overflow-hidden p-0.5"><div className="h-full bg-green-600 rounded-full transition-all duration-1000 shadow-xl" style={{ width: `${(totalPaid / (form.contractTotal || 1)) * 100}%` }}></div></div></div></div>
+          <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm"><h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest mb-6 flex items-center gap-2"><History size={16} className="text-blue-500" /> Audit Records</h3><div className="space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">{history.map((h: any) => (<div key={h.id} onClick={() => loadFromHistory(h)} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-blue-400 hover:bg-white transition-all group relative cursor-pointer"><button onClick={(e) => { e.stopPropagation(); deleteHistoryRecord(h.id); }} className="absolute top-2 right-2 w-6 h-6 bg-red-50 text-red-400 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"><X size={12}/></button><p className="text-[10px] font-black text-slate-900 uppercase truncate">{h.data?.ciNumber || "S/ REF"}</p><p className="text-[9px] font-bold text-slate-500 truncate">{h.data?.supplierName}</p><p className="text-[11px] font-mono-technical font-black text-blue-600 mt-1">$ {Number(h.data?.contractTotal || 0).toLocaleString('pt-BR')}</p></div>))}</div></div>
         </div>
       </div>
 
