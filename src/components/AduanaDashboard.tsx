@@ -290,17 +290,24 @@ export default function AduanaDashboard() {
     reader.onload = (e: any) => {
       try {
         const data = JSON.parse(e.target.result);
-        Object.keys(data).forEach(key => {
-          if (key.startsWith('ADUANAPRO_')) {
-            localStorage.setItem(key, data[key]);
-          }
+        
+        // Limpeza preventiva para evitar erro de cota (QuotaExceededError)
+        Object.keys(localStorage).forEach(key => {
+          if (key.includes('ADUANA')) localStorage.removeItem(key);
         });
-        toast.success("Dados restaurados! Reiniciando...");
-        setTimeout(() => window.location.reload(), 1500);
-      } catch (err) {
-        toast.error("Erro ao importar arquivo.");
+
+        Object.keys(data).forEach(key => {
+          localStorage.setItem(key, data[key]);
+        });
+        
+        toast.success("Dados restaurados com sucesso! Reiniciando...");
+        setTimeout(() => window.location.reload(), 1000);
+      } catch (err: any) {
+        console.error("Erro na importação:", err);
+        toast.error(`Erro ao restaurar: ${err.message || "Arquivo inválido"}`);
       }
     };
+    reader.onerror = () => toast.error("Falha ao ler o arquivo.");
     reader.readAsText(file);
   };
 
