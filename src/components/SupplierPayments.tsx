@@ -478,7 +478,10 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       )}
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center shadow-xl">{companyLogo ? <img src={companyLogo} className="w-10 h-10 object-contain" /> : <DollarSign className="text-emerald-400" size={28} />}</div>
+          <div {...gL()} className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center shadow-xl cursor-pointer hover:bg-slate-800 transition-all overflow-hidden">
+            <input {...iL()} />
+            {companyLogo ? <img src={companyLogo} className="w-10 h-10 object-contain" /> : <DollarSign className="text-emerald-400" size={28} />}
+          </div>
           <div><h1 className="text-3xl font-black text-slate-900 uppercase leading-none">Gestão Financeira</h1><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Safe Mode Active</p></div>
         </div>
         <div className="flex gap-2">
@@ -490,11 +493,6 @@ export default function SupplierPayments({ data, onUpdate }: any) {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-8">
-          <div className="bg-white p-6 rounded-[32px] border border-blue-100 flex items-center gap-6">
-            <div className="flex-1"><h3 className="text-[11px] font-black text-blue-600 uppercase mb-1">Sua Logo</h3><p className="text-[10px] text-slate-400">Arraste sua marca aqui.</p></div>
-            <div {...gL()} className="w-32 h-20 border-2 border-dashed border-blue-200 rounded-xl flex items-center justify-center cursor-pointer overflow-hidden"><input {...iL()} />{companyLogo ? <img src={companyLogo} className="w-full h-full object-contain" /> : <Upload className="text-blue-300" size={20}/>}</div>
-          </div>
-
           {/* Grid de Uploads: CI e Foto do Produto lado a lado */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Super Dropzone para CI */}
