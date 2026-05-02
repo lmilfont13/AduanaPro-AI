@@ -191,14 +191,18 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   }, [form.orderDate, form.productionDays]);
 
   const sendWhatsapp = (p: any) => {
-    const text = `*AduanaPro Intelligence - Aviso de Pagamento*\n\n` +
-                 `Olá *${form.recipientName}*,\n` +
-                 `Informamos que o milestone *${p.description}* foi processado.\n\n` +
-                 `*Ref:* ${p.ref}\n` +
-                 `*Valor:* $ ${Number(p.amount).toLocaleString('pt-BR')}\n` +
-                 `*Data:* ${new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')}\n\n` +
-                 `#Pagamento_${p.ref.replace(/\s/g, '_')}\n` +
-                 `_Gerado automaticamente pelo AduanaPro_`;
+    const text = `*SOLICITAÇÃO DE PAGAMENTO - ADUANAPRO*\n` +
+                 `------------------------------------------\n` +
+                 `*FORNECEDOR:* ${form.supplierName}\n` +
+                 `*REF CI:* ${p.ref}\n` +
+                 `*ITEM:* ${form.productName || 'Não Informado'}\n\n` +
+                 `*MILESTONE:* ${p.description}\n` +
+                 `*VALOR:* $ ${Number(p.amount).toLocaleString('pt-BR')}\n` +
+                 `*DATA PROGRAMADA:* ${new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')}\n\n` +
+                 `*DADOS BANCÁRIOS:* \n${form.bankDetails || 'Consultar Invoice Anexa'}\n\n` +
+                 `------------------------------------------\n` +
+                 `#Pagamento_${p.ref.replace(/\s/g, '_')}_${form.supplierName.split(' ')[0]}\n` +
+                 `_Solicitação gerada via AduanaPro Intelligence_`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
