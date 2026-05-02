@@ -321,15 +321,36 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             <div {...gL()} className="w-32 h-20 border-2 border-dashed border-blue-200 rounded-xl flex items-center justify-center cursor-pointer overflow-hidden"><input {...iL()} />{companyLogo ? <img src={companyLogo} className="w-full h-full object-contain" /> : <Upload className="text-blue-300" size={20}/>}</div>
           </div>
 
-          {/* NOVO: Super Dropzone para CI */}
-          <div {...gCI()} className={`group p-10 rounded-[48px] border-4 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center gap-4 ${isDragCI ? 'bg-blue-50 border-blue-500 scale-[1.02] shadow-2xl' : 'bg-white border-slate-100 hover:border-blue-300'}`}>
-            <input {...iCI()} />
-            <div className={`w-20 h-20 rounded-3xl flex items-center justify-center transition-all ${isDragCI ? 'bg-blue-500 text-white animate-bounce' : 'bg-blue-50 text-blue-500'}`}>
-              <Upload size={40} />
+          {/* Grid de Uploads: CI e Foto do Produto lado a lado */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Super Dropzone para CI */}
+            <div {...gCI()} className={`group p-8 rounded-[40px] border-4 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center gap-3 ${isDragCI ? 'bg-blue-50 border-blue-500 scale-[1.02] shadow-2xl' : 'bg-white border-slate-100 hover:border-blue-300'}`}>
+              <input {...iCI()} />
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isDragCI ? 'bg-blue-500 text-white animate-bounce' : 'bg-blue-50 text-blue-500'}`}>
+                <Upload size={28} />
+              </div>
+              <div className="text-center">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter">Extrair Dados da CI</h3>
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[2px] mt-1">Arraste a Invoice aqui</p>
+              </div>
             </div>
-            <div className="text-center">
-              <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Arraste a CI aqui para Extração</h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[3px] mt-1">IA processará Fornecedor, Valor e CI automaticamente</p>
+
+            {/* Snapshot (Foto do Produto) - Agora em destaque ao lado da CI */}
+            <div {...gP()} className={`group p-8 rounded-[40px] border-4 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center gap-3 overflow-hidden ${form.productImage ? 'border-emerald-500 bg-emerald-50/30' : 'bg-white border-slate-100 hover:border-emerald-300'}`}>
+              <input {...iP()} />
+              {form.productImage ? (
+                <img src={form.productImage} className="w-full h-32 object-contain" />
+              ) : (
+                <>
+                  <div className="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center">
+                    <ImageIcon size={28} />
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter">Foto do Produto</h3>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[2px] mt-1">Arraste a Foto aqui</p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -343,7 +364,10 @@ export default function SupplierPayments({ data, onUpdate }: any) {
               </div>
               <div className="space-y-4">
                 <div><label className="text-[9px] font-black text-slate-400 uppercase block">Total USD $</label><input type="number" value={form.contractTotal} onChange={(e) => setForm(p => ({ ...p, contractTotal: Number(e.target.value) }))} className="w-full p-4 bg-slate-900 text-emerald-400 rounded-2xl text-[16px] font-black font-mono shadow-inner border-none" /></div>
-                <div className="pt-2"><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-2"><ImageIcon size={14} className="text-emerald-500" /> Snapshot</h3><div {...gP()} className="w-full h-40 border-2 border-dashed border-slate-200 rounded-[24px] flex items-center justify-center cursor-pointer overflow-hidden bg-slate-50 group hover:border-blue-400 transition-all"><input {...iP()} />{form.productImage ? <img src={form.productImage} className="w-full h-full object-contain p-2" /> : <Zap className="text-slate-200 group-hover:text-blue-300" size={24}/>}</div></div>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 h-40 flex flex-col justify-center">
+                   <h3 className="text-[10px] font-black text-slate-400 uppercase mb-2 flex items-center gap-2"><Globe2 size={14}/> Containers</h3>
+                   <textarea value={form.containerNumber} onChange={(e) => setForm(p => ({ ...p, containerNumber: e.target.value }))} className="w-full h-full bg-transparent border-none text-[10px] font-bold text-slate-600 outline-none resize-none" placeholder="Lista de Containers..."></textarea>
+                </div>
               </div>
             </div>
             <div className="pt-6 border-t border-slate-100 flex gap-4">
