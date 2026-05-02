@@ -169,82 +169,86 @@ export default function SupplierPayments({ data, onUpdate }: any) {
 
     const doc = new jsPDF() as any;
     const pw = doc.internal.pageSize.width;
-    let y = 20;
+    const ph = doc.internal.pageSize.height;
+    let y = 15;
 
-    // Cabeçalho Principal (Apenas na primeira página)
+    // Cabeçalho Principal
     if (companyLogo) {
-      try { doc.addImage(companyLogo, 'PNG', pw/2 - 20, y, 40, 20); y += 25; } catch(e){}
+      try { doc.addImage(companyLogo, 'PNG', 15, y, 30, 15); } catch(e){}
     }
     
-    doc.setFontSize(22);
-    doc.setTextColor(15, 23, 42); // Slate 900
+    doc.setFontSize(16);
+    doc.setTextColor(15, 23, 42);
     doc.setFont("helvetica", "bold");
-    doc.text("RELATÓRIO DE STATUS FINANCEIRO", pw/2, y, { align: 'center' });
-    y += 10;
-    
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(100);
-    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pw/2, y, { align: 'center' });
-    y += 15;
+    doc.text("RELATÓRIO CONSOLIDADO DE STATUS", pw - 15, y + 10, { align: 'right' });
+    y += 25;
 
     selectedRecords.forEach((record, index) => {
       const f = record.data;
-      if (index > 0) { doc.addPage(); y = 20; }
+      const estimatedHeight = 50 + (f.milestones?.length || 0) * 8; // Estimativa de altura do bloco
 
-      // Banner do Fornecedor
-      doc.setFillColor(248, 250, 252); // bg-slate-50
-      doc.rect(15, y, pw - 30, 45, 'F');
-      
-      // Foto do Produto (Snapshot)
+      // Verifica se precisa de nova página
+      if (y + estimatedHeight > ph - 20) {
+        doc.addPage();
+        y = 15;
+      }
+
+      // Separador sutil entre registros
+      if (index > 0) {
+        doc.setDrawColor(240);
+        doc.line(15, y - 5, pw - 15, y - 5);
+      }
+
+      // Foto Reduzida (Miniatura)
       if (f.productImage) {
         try { 
-          doc.addImage(f.productImage, 'JPEG', 20, y + 5, 35, 35); 
+          doc.addImage(f.productImage, 'JPEG', 15, y, 20, 20); 
         } catch(e){
-          doc.setDrawColor(200); doc.rect(20, y + 5, 35, 35);
-          doc.text("SEM FOTO", 37.5, y + 22.5, { align: 'center' });
+          doc.setDrawColor(230); doc.rect(15, y, 20, 20);
         }
       }
 
-      doc.setFontSize(14);
+      doc.setFontSize(11);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(15, 23, 42);
-      doc.text(f.supplierName?.toUpperCase() || "FORNECEDOR N/I", 65, y + 15);
+      doc.text(f.supplierName?.toUpperCase() || "FORNECEDOR N/I", 40, y + 5);
       
-      doc.setFontSize(10);
-      doc.setTextColor(71, 85, 105); // Slate 600
-      doc.text(`Ref. Invoice (CI): ${f.ciNumber || "N/E"}`, 65, y + 22);
-      doc.text(`Containers: ${f.containerNumber || "N/E"}`, 65, y + 28);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100);
+      doc.text(`CI: ${f.ciNumber || "N/E"} | CTN: ${f.containerNumber || "N/E"}`, 40, y + 10);
       
-      // Resumo Financeiro do Card
+      // Resumo Financeiro Compacto
       const totalPaid = (f.milestones || []).filter((m: any) => m.isPaid).reduce((acc: number, cur: any) => acc + Number(cur.amount), 0);
       const totalPending = Number(f.contractTotal || 0) - totalPaid;
       
-      doc.setFontSize(9);
-      doc.text(`TOTAL: $ ${Number(f.contractTotal || 0).toLocaleString('en-US')}`, 65, y + 36);
-      doc.setTextColor(16, 185, 129); // Emerald 500
-      doc.text(`PAGO: $ ${totalPaid.toLocaleString('en-US')}`, 105, y + 36);
-      doc.setTextColor(244, 63, 94); // Rose 500
-      doc.text(`PENDENTE: $ ${totalPending.toLocaleString('en-US')}`, 145, y + 36);
+      doc.setFontSize(8);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`TOTAL: $ ${Number(f.contractTotal || 0).toLocaleString('en-US')}`, 40, y + 16);
+      doc.setTextColor(16, 185, 129);
+      doc.text(`PAGO: $ ${totalPaid.toLocaleString('en-US')}`, 80, y + 16);
+      doc.setTextColor(244, 63, 94);
+      doc.text(`SALDO: $ ${totalPending.toLocaleString('en-US')}`, 115, y + 16);
 
-      y += 55;
+      y += 22;
 
-      // Tabela de Milestones
+      // Tabela Ultra-Compacta
       const tableData = (f.milestones || []).map((m: any) => [
         new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR'),
         m.description?.toUpperCase(),
-        m.isPaid ? 'LIQUIDADO' : 'PENDENTE',
+        m.isPaid ? 'PAGO' : 'PENDENTE',
         `${m.percentage}%`,
         `$ ${Number(m.amount).toLocaleString('en-US')}`
       ]);
 
       autoTable(doc, {
         startY: y,
-        head: [['VENCIMENTO', 'FASE/DESCRIÇÃO', 'STATUS', '%', 'VALOR USD']],
+        margin: { left: 15, right: 15 },
+        head: [['DATA', 'FASE', 'STATUS', '%', 'VALOR USD']],
         body: tableData,
-        theme: 'striped',
-        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-        bodyStyles: { fontSize: 8 },
+        theme: 'plain',
+        styles: { fontSize: 7, cellPadding: 1 },
+        headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold' },
         columnStyles: {
           2: { fontStyle: 'bold' },
           4: { halign: 'right', fontStyle: 'bold' }
@@ -252,17 +256,17 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         didDrawCell: (data) => {
           if (data.section === 'body' && data.column.index === 2) {
             const status = data.cell.raw;
-            if (status === 'LIQUIDADO') doc.setTextColor(16, 185, 129);
+            if (status === 'PAGO') doc.setTextColor(16, 185, 129);
             else doc.setTextColor(244, 63, 94);
           }
         }
       });
 
-      y = (doc as any).lastAutoTable.finalY + 20;
+      y = (doc as any).lastAutoTable.finalY + 12;
     });
 
-    doc.save(`Status_Report_${new Date().getTime()}.pdf`);
-    toast.success("Relatório Premium gerado com sucesso!");
+    doc.save(`Status_Consolidado_${new Date().getTime()}.pdf`);
+    toast.success("Relatório Compacto gerado!");
   };
 
   // DROPZONES (NO TOPO)
