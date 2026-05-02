@@ -216,22 +216,24 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     const unpaidPct = ((totalUnpaid / (form.contractTotal || 1)) * 100).toFixed(1);
     const brlValue = (form.contractTotal * (form.exchangeRate || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+    const m = (val: any) => `\`${val}\``; // Helper para monoespaçado
+
     let text = `💼 *SOLICITAÇÃO DE PAGAMENTO - ${form.supplierName}*\n\n` +
                `${form.recipientName}, bom dia! 🏦 gostaria de formalizar o pedido de lançamento de câmbio conforme abaixo:\n\n` +
-               `*Ref. Pedido:* ${form.ciNumber} 📄\n` +
+               `*Ref. Pedido:* ${m(form.ciNumber)} 📄\n` +
                `*Containers:* ${form.containerNumber || 'Não especificado'}\n` +
                `*Produto:* ${form.productName || 'N/I'}\n` +
-               `*Previsão de Embarque:* ${shipmentDate} 🚢\n` +
+               `*Previsão de Embarque:* ${m(shipmentDate)} 🚢\n` +
                `----------------------------------\n` +
-               `*VALOR TOTAL DO CONTRATO:* 💰 USD ${form.contractTotal.toLocaleString('pt-BR')} (R$ ${brlValue})\n` +
-               `*TOTAL JÁ LIQUIDADO:* USD ${totalPaid.toLocaleString('pt-BR')} (${paidPct}%)\n` +
-               `*SALDO REMANESCENTE:* USD ${totalUnpaid.toLocaleString('pt-BR')} (${unpaidPct}%)\n\n` +
+               `*VALOR TOTAL DO CONTRATO:* 💰 USD ${m(form.contractTotal.toLocaleString('pt-BR'))} (R$ ${m(brlValue)})\n` +
+               `*TOTAL JÁ LIQUIDADO:* USD ${m(totalPaid.toLocaleString('pt-BR'))} (${m(paidPct)}%)\n` +
+               `*SALDO REMANESCENTE:* USD ${m(totalUnpaid.toLocaleString('pt-BR'))} (${m(unpaidPct)}%)\n\n` +
                `*PARCELAS CONTRATO:*\n`;
                
     form.milestones.forEach((p: any) => {
       const dateFormatted = new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR');
       const isToday = p.date === todayStr;
-      const line = `• Vencimento: ${dateFormatted} | Valor: USD ${p.amount.toLocaleString('pt-BR')} (${p.percentage}%)${isToday ? ' <--- HOJE' : ''}`;
+      const line = `• Vencimento: ${m(dateFormatted)} | Valor: USD ${m(p.amount.toLocaleString('pt-BR'))} (${m(p.percentage)}%)${isToday ? ' <--- HOJE' : ''}`;
       text += p.isPaid ? `~${line}~\n` : `${line}\n`;
     });
     
