@@ -180,24 +180,31 @@ export const compareFreightQuotesWithGroq = async (quotes: any[]): Promise<{ sum
 };
 
 export const parsePaymentReceiptWithGroq = async (base64Data: string, mimeType: string, pdfText?: string): Promise<any> => {
-  const prompt = `Analise profundamente este documento de importação (Commercial Invoice / Payment Term). 
-  Sua missão é extrair os dados financeiros com precisão absoluta, mesmo que o layout seja complexo ou incomum.
+  const prompt = `Analise profundamente este documento de importação (Commercial Invoice, Proforma ou SWIFT/Comprovante Bancário). 
+  Sua missão é extrair os dados financeiros com precisão absoluta.
 
-  CAMPOS OBRIGATÓRIOS (JSON):
-  - supplierName: Nome oficial do Fornecedor/Exportador.
-  - ciNumber: Número da Commercial Invoice, Proforma ou Referência do Pedido.
-  - containerNumber: Lista de containers (formato ABCD1234567), se houver.
-    "contractTotal": "valor total",
-    "ciNumber": "número da fatura/pedido",
-    "containerNumber": "número do container",
-    "bankDetails": "string formatada com todos os dados bancários encontrados (Beneficiary, Account, SWIFT, Bank, etc.)",
+  INSTRUÇÕES ESPECÍFICAS:
+  1. Procure pelo Nome do Exportador/Fornecedor (Supplier).
+  2. Identifique o número da fatura (CI/PI/Invoice Number).
+  3. Busque o VALOR TOTAL (Total Amount Due). Ignore subtotais se houver um total final.
+  4. EXTRAIA TODOS OS DADOS BANCÁRIOS: Beneficiário, Banco, Agência, Conta, Código SWIFT/BIC e IBAN. Formate isso em um bloco de texto amigável.
+  5. Identifique se há menção a containers.
+
+  Retorne EXATAMENTE este formato JSON:
+  {
+    "supplierName": "nome do fornecedor",
+    "ciNumber": "número da invoice ou pedido",
+    "contractTotal": 0,
+    "containerNumber": "números dos containers se houver",
+    "bankDetails": "Texto completo com Beneficiário, Banco, Conta e SWIFT",
     "milestones": [
-      { "description": "ex: 30% Advance", "percentage": 30, "amount": 1000, "isPaid": false, "date": "YYYY-MM-DD" }
+      { "description": "ex: 30% Advance", "percentage": 30, "amount": 0, "isPaid": false, "date": "YYYY-MM-DD" }
     ]
   }
-  
-  Texto extraído: ${pdfText}
-  ${base64Data ? "Analise também a imagem anexa para detalhes visuais." : ""}`;
+
+  TEXTO EXTRAÍDO DO DOCUMENTO:
+  ${pdfText}
+  ${base64Data ? "\n(Também utilize a imagem/PDF para validar dados visuais)" : ""}`;
   
   return await callAI(prompt, base64Data);
 };
