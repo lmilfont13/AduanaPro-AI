@@ -290,8 +290,60 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       y = (doc as any).lastAutoTable.finalY + 12;
     });
 
+    // --- SEÇÃO DE RESUMO MENSAL (FLUXO DE CAIXA) ---
+    const monthlySummary: Record<string, number> = {};
+    
+    selectedRecords.forEach(record => {
+      const ms = record.data?.milestones || [];
+      ms.forEach((m: any) => {
+        if (!m.isPaid) {
+          const d = new Date(m.date + 'T12:00:00');
+          if (!isNaN(d.getTime())) {
+            const key = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+            monthlySummary[key] = (monthlySummary[key] || 0) + Number(m.amount || 0);
+          }
+        }
+      });
+    });
+
+    const summaryData = Object.entries(monthlySummary)
+      .sort((a, b) => {
+        // Ordenação cronológica simples baseada no nome do mês/ano
+        const [mA, yA] = a[0].split(' DE ');
+        const [mB, yB] = b[0].split(' DE ');
+        return new Date(`${mA} 1, ${yA}`).getTime() - new Date(`${mB} 1, ${yB}`).getTime();
+      })
+      .map(([month, total]) => [month, `$ ${total.toLocaleString('en-US')}`]);
+
+    if (summaryData.length > 0) {
+      if (y > ph - 40) { doc.addPage(); y = 20; }
+      else { y += 10; }
+
+      doc.setFillColor(15, 23, 42);
+      doc.rect(15, y, pw - 30, 8, 'F');
+      doc.setFontSize(9);
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.text("RESUMO DE CONTAS A PAGAR POR MÊS (PROJEÇÃO)", pw/2, y + 5.5, { align: 'center' });
+      
+      y += 8;
+
+      autoTable(doc, {
+        startY: y,
+        margin: { left: 15, right: 15 },
+        head: [['MÊS / ANO', 'VALOR TOTAL PENDENTE (USD)']],
+        body: summaryData,
+        theme: 'striped',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold' },
+        columnStyles: {
+          1: { halign: 'right', fontStyle: 'bold', textColor: [244, 63, 94] }
+        }
+      });
+    }
+
     doc.save(`Status_Consolidado_${new Date().getTime()}.pdf`);
-    toast.success("Relatório Compacto gerado!");
+    toast.success("Relatório com Resumo Mensal gerado!");
   };
 
   // DROPZONES (NO TOPO)
