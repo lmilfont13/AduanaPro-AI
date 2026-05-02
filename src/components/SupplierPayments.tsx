@@ -207,26 +207,32 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   };
 
   const sendGlobalWhatsapp = () => {
-    const pendings = form.milestones.filter((m: any) => !m.isPaid);
-    if (pendings.length === 0) { toast.error("Nenhuma parcela pendente!"); return; }
-    
-    let text = `*SOLICITAÇÃO DE PAGAMENTO CONSOLIDADA - ADUANAPRO*\n` +
-               `------------------------------------------\n` +
-               `*FORNECEDOR:* ${form.supplierName}\n` +
-               `*REF CI:* ${form.ciNumber}\n` +
-               `*ITEM:* ${form.productName || 'Não Informado'}\n\n` +
-               `*PARCELAS PENDENTES:*\n`;
+    const totalPaid = form.milestones.filter((m: any) => m.isPaid).reduce((acc: number, cur: any) => acc + Number(cur.amount), 0);
+    const totalUnpaid = form.contractTotal - totalPaid;
+    const paidPct = ((totalPaid / (form.contractTotal || 1)) * 100).toFixed(1);
+    const unpaidPct = ((totalUnpaid / (form.contractTotal || 1)) * 100).toFixed(1);
+    const brlValue = (form.contractTotal * (form.exchangeRate || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    let text = `💼 *SOLICITAÇÃO DE PAGAMENTO - ${form.supplierName}*\n\n` +
+               `${form.recipientName}, bom dia! 🏦 gostaria de formalizar o pedido de lançamento de câmbio conforme abaixo:\n\n` +
+               `*Ref. Pedido:* ${form.ciNumber} 📄\n` +
+               `*Containers:* ${form.containerNumber || 'Não especificado'}\n` +
+               `*Produto:* ${form.productName || 'N/I'}\n` +
+               `*Previsão de Embarque:* ${shipmentDate} 🚢\n` +
+               `----------------------------------\n` +
+               `*VALOR TOTAL DO CONTRATO:* 💰 USD ${form.contractTotal.toLocaleString('pt-BR')} (R$ ${brlValue})\n` +
+               `*TOTAL JÁ LIQUIDADO:* USD ${totalPaid.toLocaleString('pt-BR')} (${paidPct}%)\n` +
+               `*SALDO REMANESCENTE:* USD ${totalUnpaid.toLocaleString('pt-BR')} (${unpaidPct}%)\n\n` +
+               `*PARCELAS:*\n`;
                
-    pendings.forEach((p: any) => {
-      text += `- ${p.description}: $ ${Number(p.amount).toLocaleString('pt-BR')} (${new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')})\n`;
+    form.milestones.forEach((p: any) => {
+      text += `• Vencimento: ${new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')} | Valor: USD ${p.amount.toLocaleString('pt-BR')} (${p.percentage}%)\n`;
     });
     
-    const total = pendings.reduce((acc: number, cur: any) => acc + Number(cur.amount), 0);
-    text += `\n*TOTAL PENDENTE:* $ ${total.toLocaleString('pt-BR')}\n\n` +
-            `*DADOS BANCÁRIOS:* \n${form.bankDetails || 'Consultar Invoice Anexa'}\n\n` +
-            `------------------------------------------\n` +
-            `#Pagamento_Consolidado_${form.ciNumber.replace(/\s/g, '_')}\n` +
-            `_Solicitação gerada via AduanaPro Intelligence_`;
+    text += `\n🏦 *DADOS BANCÁRIOS / OBSERVAÇÕES:*\n` +
+            `${form.bankDetails || 'Consultar Invoice Anexa'}\n\n` +
+            `Fico no aguardo do comprovante de pagamento, obrigado! 🤝\n\n` +
+            `#Pagamento_${form.ciNumber.replace(/\s/g, '')}_`;
             
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
