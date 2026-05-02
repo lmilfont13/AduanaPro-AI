@@ -316,15 +316,15 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       .map(([month, total]) => [month, `$ ${total.toLocaleString('en-US')}`]);
 
     if (summaryData.length > 0) {
-      if (y > ph - 40) { doc.addPage(); y = 20; }
-      else { y += 10; }
+      doc.addPage(); 
+      y = 20;
 
       doc.setFillColor(15, 23, 42);
       doc.rect(15, y, pw - 30, 8, 'F');
       doc.setFontSize(9);
       doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
-      doc.text("RESUMO DE CONTAS A PAGAR POR MÊS (PROJEÇÃO)", pw/2, y + 5.5, { align: 'center' });
+      doc.text("PROJEÇÃO CONSOLIDADA DE FLUXO DE CAIXA MENSAL", pw/2, y + 5.5, { align: 'center' });
       
       y += 8;
 
