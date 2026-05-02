@@ -197,22 +197,22 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     const ph = doc.internal.pageSize.height;
     let y = 15;
 
-    // Cabeçalho Principal com Proporção Automática
+    // Cabeçalho Principal com Proporção Automática e Tamanho Ampliado
     if (companyLogo) {
       try { 
         const imgProps = doc.getImageProperties(companyLogo);
-        const logoHeight = 15;
+        const logoHeight = 25; // Aumentado de 15 para 25 para mais destaque
         const logoWidth = (imgProps.width * logoHeight) / imgProps.height;
         doc.addImage(companyLogo, 'PNG', 15, y, logoWidth, logoHeight); 
       } catch(e){}
     }
     
-    doc.setFontSize(16);
+    doc.setFontSize(18); // Aumentado levemente o tamanho da fonte
     doc.setTextColor(15, 23, 42);
     doc.setFont("helvetica", "bold");
-    // Alinhamento vertical ajustado (y + 10 para y + 9.5 para centralizar com a logo de 15mm)
-    doc.text("RELATÓRIO CONSOLIDADO DE STATUS", pw - 15, y + 10, { align: 'right' });
-    y += 25;
+    // Alinhamento vertical centralizado com a logo de 25mm
+    doc.text("RELATÓRIO CONSOLIDADO DE STATUS", pw - 15, y + 16, { align: 'right' });
+    y += 35; // Aumentado o espaçamento para não encavalar no conteúdo
 
     selectedRecords.forEach((record, index) => {
       const f = record.data;
