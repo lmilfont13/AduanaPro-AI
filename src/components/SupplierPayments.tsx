@@ -61,6 +61,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   const [loading, setLoading] = useState(false);
   const [showMsg, setShowMsg] = useState(false);
   const [showVisualReport, setShowVisualReport] = useState(false);
+  const [visualLanguage, setVisualLanguage] = useState<'PT' | 'EN'>('EN');
   const [whatsappText, setWhatsappText] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   
@@ -599,18 +600,58 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   const paidPct = totalContract > 0 ? (totalPaid / totalContract) * 100 : 0;
   const pendingPct = totalContract > 0 ? (totalPending / totalContract) * 100 : 0;
 
+  const dict = {
+    PT: {
+      title: "Relatório de Pagamento",
+      contractTotal: "TOTAL DO CONTRATO",
+      amountPaid: "VALOR PAGO",
+      remainingBalance: "SALDO REMANESCENTE",
+      ledger: "EXTRATO DE MARCOS (PAYMENT LEDGER)",
+      paidPrefix: "Pago: USD",
+      date: "DATA",
+      description: "DESCRIÇÃO/MILESTONE",
+      share: "SHARE",
+      value: "USD VALUE",
+      confirmed: "PAGAMENTO CONFIRMADO",
+      awaiting: "AGUARDANDO LIQUIDAÇÃO",
+      totalContract: "Total do Contrato:",
+      totalSettled: "Total Liquidado:"
+    },
+    EN: {
+      title: "Payment Report",
+      contractTotal: "CONTRACT TOTAL",
+      amountPaid: "AMOUNT PAID",
+      remainingBalance: "REMAINING BALANCE",
+      ledger: "PAYMENT LEDGER",
+      paidPrefix: "Paid: USD",
+      date: "DATE",
+      description: "DESCRIPTION/MILESTONE",
+      share: "SHARE",
+      value: "USD VALUE",
+      confirmed: "PAYMENT CONFIRMED",
+      awaiting: "AWAITING SETTLEMENT",
+      totalContract: "Total Contract:",
+      totalSettled: "Total Settled:"
+    }
+  };
+  const t = dict[visualLanguage];
+
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-6 bg-[#f8fafc] min-h-screen">
       {showVisualReport && (
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[200] flex flex-col items-center p-4 py-10 overflow-y-auto custom-scrollbar">
-          <div className="w-full max-w-[800px] flex justify-end mb-4 shrink-0">
+          <div className="w-full max-w-[800px] flex justify-end mb-4 shrink-0 gap-2">
+             <div className="bg-white/10 p-1 rounded-xl flex gap-1 items-center mr-auto">
+               <button onClick={() => setVisualLanguage('PT')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${visualLanguage === 'PT' ? 'bg-white text-slate-900 shadow-lg' : 'text-white/50 hover:text-white'}`}>Português</button>
+               <button onClick={() => setVisualLanguage('EN')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${visualLanguage === 'EN' ? 'bg-white text-slate-900 shadow-lg' : 'text-white/50 hover:text-white'}`}>English</button>
+             </div>
              <button onClick={() => setShowVisualReport(false)} className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center hover:bg-white/20 transition-all text-white"><X/></button>
           </div>
           
           <div className="bg-white w-full max-w-[800px] rounded-xl shadow-2xl p-10 font-sans relative shrink-0">
             <div className="flex flex-col items-center mb-8">
               {companyLogo ? <img src={companyLogo} className="h-16 mb-4 object-contain" /> : <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-3xl mb-4">m</div>}
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Relatório de Pagamento</h1>
+              <h1 className="text-3xl font-black text-slate-900 tracking-tight">{t.title}</h1>
               <p className="text-[11px] font-black text-orange-500 uppercase mt-1 tracking-widest">OFFICIAL ORDER VERIFICATION</p>
             </div>
             
@@ -622,7 +663,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
                 <p className="text-[10px] font-bold text-slate-500 uppercase mt-2">REFERENCE: {form.ciNumber}</p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">TOTAL DO CONTRATO</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">{t.contractTotal}</p>
                 <p className="text-2xl font-black text-slate-900">USD {totalContract.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
             </div>
@@ -630,7 +671,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             <div className="grid grid-cols-2 gap-6 mb-10">
               <div className="bg-emerald-50 rounded-2xl p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <span className="text-[11px] font-black text-emerald-600 uppercase">Valor Pago</span>
+                  <span className="text-[11px] font-black text-emerald-600 uppercase">{t.amountPaid}</span>
                   <span className="text-[11px] font-black text-emerald-600">{paidPct.toFixed(1)}%</span>
                 </div>
                 <p className="text-3xl font-black text-emerald-500 mb-6">USD {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
@@ -641,7 +682,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
               
               <div className="bg-rose-50 rounded-2xl p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <span className="text-[11px] font-black text-rose-600 uppercase">Saldo Remanescente</span>
+                  <span className="text-[11px] font-black text-rose-600 uppercase">{t.remainingBalance}</span>
                   <span className="text-[11px] font-black text-rose-600">{pendingPct.toFixed(1)}%</span>
                 </div>
                 <p className="text-3xl font-black text-rose-500 mb-6">USD {totalPending.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
@@ -652,18 +693,18 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             </div>
             
             <div className="flex justify-between items-end mb-4 px-2">
-              <h3 className="text-[12px] font-black text-slate-500 uppercase tracking-widest">Extrato de Marcos (Payment Ledger)</h3>
-              <p className="text-[11px] font-bold text-slate-500">Pago: USD {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <h3 className="text-[12px] font-black text-slate-500 uppercase tracking-widest">{t.ledger}</h3>
+              <p className="text-[11px] font-bold text-slate-500">{t.paidPrefix} {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
             
             <div className="w-full mb-10">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b-2 border-slate-100">
-                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase">Data</th>
-                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase">Descrição/Milestone</th>
-                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase text-center">Share</th>
-                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase text-right">USD Value</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase">{t.date}</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase">{t.description}</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase text-center">{t.share}</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase text-right">{t.value}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -671,7 +712,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
                     <tr key={i} className={`border-b border-slate-100 ${m.isPaid ? 'bg-yellow-50/50 border-l-4 border-l-yellow-400' : 'bg-white border-l-4 border-l-transparent'}`}>
                       <td className="py-4 px-4">
                         <p className="text-[11px] font-bold text-slate-700">{m.date}</p>
-                        <p className={`text-[8px] font-black uppercase mt-1 ${m.isPaid ? 'text-emerald-500' : 'text-slate-400'}`}>{m.isPaid ? 'PAGAMENTO CONFIRMADO' : 'AGUARDANDO LIQUIDAÇÃO'}</p>
+                        <p className={`text-[8px] font-black uppercase mt-1 ${m.isPaid ? 'text-emerald-500' : 'text-slate-400'}`}>{m.isPaid ? t.confirmed : t.awaiting}</p>
                       </td>
                       <td className="py-4 px-4 text-[11px] font-medium text-slate-600">{m.description}</td>
                       <td className="py-4 px-4 text-[11px] font-bold text-slate-600 text-center">{m.percentage}%</td>
@@ -685,16 +726,16 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             <div className="bg-slate-50 p-6 rounded-2xl flex justify-between items-center">
               <div className="space-y-4">
                 <div className="flex gap-4">
-                  <span className="text-[11px] font-black text-slate-500 uppercase w-32">Total do Contrato:</span>
+                  <span className="text-[11px] font-black text-slate-500 uppercase w-32">{t.totalContract}</span>
                   <span className="text-[12px] font-black text-slate-900">USD {totalContract.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex gap-4">
-                  <span className="text-[11px] font-black text-slate-500 uppercase w-32">Total Liquidado:</span>
+                  <span className="text-[11px] font-black text-slate-500 uppercase w-32">{t.totalSettled}</span>
                   <span className="text-[12px] font-black text-emerald-500">USD {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({paidPct.toFixed(1)}%)</span>
                 </div>
               </div>
               <div className="bg-rose-500 rounded-xl p-5 text-center min-w-[200px] shadow-lg shadow-rose-500/20">
-                <p className="text-[9px] font-black text-rose-100 uppercase mb-1">Saldo Remanescente</p>
+                <p className="text-[9px] font-black text-rose-100 uppercase mb-1">{t.remainingBalance}</p>
                 <p className="text-xl font-black text-white">USD {totalPending.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
             </div>
