@@ -107,14 +107,8 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   });
 
   // Sincronização Segura
+  // Salvamento manual via botão para evitar loops de reinicialização
   const lastUpdateRef = useRef("");
-  useEffect(() => {
-    const current = JSON.stringify(form);
-    if (current !== lastUpdateRef.current) {
-      const timer = setTimeout(() => { if (onUpdate) onUpdate(form); lastUpdateRef.current = current; }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [form]);
 
   // Câmbio
   useEffect(() => {
@@ -299,7 +293,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
                 <div><label className="text-[9px] font-black text-slate-400 uppercase block">Exportador</label><input type="text" value={form.supplierName} onChange={(e) => setForm(p => ({ ...p, supplierName: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black uppercase border-none focus:ring-2 ring-blue-500/20 outline-none" /></div>
-                <div><label className="text-[9px] font-black text-slate-400 uppercase block">Ref CI</label><input type="text" value={form.ciNumber} onChange={(e) => setForm(p => ({ ...p, ciNumber: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black uppercase border-none focus:ring-2 ring-blue-500/20 outline-none" /></div>
+                <div><label className="text-[10px] font-black text-blue-600 uppercase block mb-1">Número da Invoice (CI)</label><input type="text" placeholder="Ex: CI-2024-001" value={form.ciNumber} onChange={(e) => setForm(p => ({ ...p, ciNumber: e.target.value }))} className="w-full p-5 bg-blue-50 border-2 border-blue-200 rounded-2xl text-[13px] font-black uppercase text-blue-900 shadow-sm focus:ring-4 ring-blue-500/10 outline-none transition-all" /></div>
                 <div {...gB()} className="w-full h-24 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center cursor-pointer overflow-hidden group hover:border-blue-400 transition-all"><input {...iB()} />{form.bankImage ? <img src={form.bankImage} className="w-full h-full object-cover" /> : <div className="flex flex-col items-center text-slate-300 group-hover:text-blue-400"><FileDown size={24}/><span className="text-[8px] font-black uppercase mt-1">SWIFT / Bank</span></div>}</div>
               </div>
               <div className="space-y-4">
