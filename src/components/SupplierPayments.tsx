@@ -277,9 +277,29 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         head: [['DATA', 'FASE', 'STATUS', '%', 'VALOR USD']],
         body: tableData,
         theme: 'plain',
-        styles: { fontSize: 7, cellPadding: 1 },
-        headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold' },
-        columnStyles: { 2: { fontStyle: 'bold' }, 4: { halign: 'right', fontStyle: 'bold' } },
+        styles: { fontSize: 7, cellPadding: 1.5 },
+        headStyles: { 
+          fillColor: [241, 245, 249], 
+          textColor: [71, 85, 105], 
+          fontStyle: 'bold',
+          halign: 'left' // Reset padrão para customizar abaixo
+        },
+        columnStyles: { 
+          0: { halign: 'center', cellWidth: 25 },
+          1: { halign: 'left' },
+          2: { halign: 'center', fontStyle: 'bold', cellWidth: 25 },
+          3: { halign: 'center', cellWidth: 15 },
+          4: { halign: 'right', fontStyle: 'bold', cellWidth: 35 }
+        },
+        // Sincroniza alinhamento do Header com o Body
+        didParseCell: (data) => {
+          if (data.section === 'head') {
+            if (data.column.index === 0) data.cell.styles.halign = 'center';
+            if (data.column.index === 2) data.cell.styles.halign = 'center';
+            if (data.column.index === 3) data.cell.styles.halign = 'center';
+            if (data.column.index === 4) data.cell.styles.halign = 'right';
+          }
+        },
         didDrawCell: (data) => {
           if (data.section === 'body' && data.column.index === 2) {
             const status = data.cell.raw;
