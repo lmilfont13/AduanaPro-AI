@@ -33,7 +33,7 @@ import {
   Download
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { parsePaymentReceiptWithGroq } from '../services/groqService';
 import { extractTextFromPDF } from '../services/pdfService';
 import { supabase, IS_SUPABASE_CONFIGURED } from '../lib/supabase';
@@ -162,7 +162,12 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     doc.setTextColor(255, 255, 255); doc.setFontSize(20); doc.text("GESTÃO DE PAGAMENTO", 20, 25);
     doc.setFontSize(9); doc.text(`REF: ${form.ciNumber} | ${new Date().toLocaleDateString()}`, 20, 32);
     const tableData = form.milestones.map(m => [new Date(m.date + 'T12:00:00').toLocaleDateString(), m.description, `${form.currency} ${m.amount.toLocaleString('pt-BR')}`, m.isPaid ? "PAGO" : "PENDENTE"]);
-    doc.autoTable({ startY: 85, head: [['Data', 'Descricao', 'Valor', 'Status']], body: tableData, theme: 'grid' });
+    autoTable(doc, {
+      startY: 85,
+      head: [['Data', 'Descricao', 'Valor', 'Status']],
+      body: tableData,
+      theme: 'grid'
+    });
     doc.save(`Gestao_${form.ciNumber}.pdf`);
   };
 
