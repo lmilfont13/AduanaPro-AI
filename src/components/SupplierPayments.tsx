@@ -39,7 +39,8 @@ import {
   Eraser,
   Globe2,
   FileCheck,
-  PenTool
+  PenTool,
+  Copy
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -114,17 +115,19 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       } catch (e) {}
 
       if (typeof supabase !== 'undefined') {
-        const { data, error } = await supabase.from('supplier_payments').select('*').order('created_at', { ascending: false });
+        // Removido .order('created_at') para evitar falhas caso a tabela simples não tenha a coluna
+        const { data, error } = await supabase.from('supplier_payments').select('*');
         if (!error && data) {
           if (data.length === 0 && localData.length > 0) {
-            // Migrar do localStorage para o Supabase
             setHistory(localData);
             const rowsToInsert = localData.map(h => ({ id: h.id, data: h.data }));
             supabase.from('supplier_payments').upsert(rowsToInsert).then();
             return;
           }
           if (data.length > 0) {
-            setHistory(data.map(r => ({ id: r.id, data: r.data })));
+            // Inverte a ordem para mostrar os mais recentes primeiro, já que não tem order by no SQL
+            const reversed = data.map(r => ({ id: r.id, data: r.data })).reverse();
+            setHistory(reversed);
             return;
           }
         }
@@ -191,11 +194,17 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   }, [form.orderDate, form.contractTotal, form.productionDays, form.paymentTerms]);
 
   const saveRecord = async () => {
+    const isNew = !(form as any).id;
     const rid = (form as any).id || `R_${Date.now()}`;
     const record = { id: rid, data: { ...form, id: rid } };
     const nh = [ record, ...history.filter(h => h.id !== rid) ];
     setHistory(nh);
     localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(nh));
+    
+    // Atualiza o ID no formulário atual para que próximos saves apenas atualizem
+    if (isNew) {
+      setForm(p => ({ ...p, id: rid }));
+    }
     
     if (typeof supabase !== 'undefined') {
       const { error } = await supabase.from('supplier_payments').upsert([{ id: rid, data: record.data }]);
@@ -233,6 +242,15 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       ]
     });
     setSelectedIds([]);
+  };
+
+  const duplicateRecord = () => {
+    if (!form.id) {
+      toast.error("Salve o registro antes de duplicar.");
+      return;
+    }
+    setForm(p => ({ ...p, id: '' }));
+    toast.success("Registro duplicado! Altere os dados e clique em 'Salvar Novo'.");
   };
 
   const deleteRecord = async (id: string) => {
@@ -791,9 +809,10 @@ export default function SupplierPayments({ data, onUpdate }: any) {
           </label>
           <div className="w-px h-12 bg-slate-200 mx-2 hidden md:block"></div>
           <button onClick={clearForm} className="px-6 py-4 bg-blue-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-blue-600 transition-all shadow-lg"><Plus size={18}/> Novo</button>
+          <button onClick={duplicateRecord} className="px-6 py-4 bg-purple-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-purple-600 transition-all shadow-lg"><Copy size={18}/> Duplicar</button>
           <button onClick={() => setShowVisualReport(true)} className="px-6 py-4 bg-indigo-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-indigo-600 transition-all shadow-lg"><FileText size={18}/> Relatório Visual</button>
           <button onClick={sendGlobalWhatsapp} className="px-6 py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg"><MessageSquare size={18}/> WhatsApp Financeiro</button>
-          <button onClick={saveRecord} className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg"><Save size={18}/> Salvar</button>
+          <button onClick={saveRecord} className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg"><Save size={18}/> {(form as any).id ? 'Atualizar' : 'Salvar Novo'}</button>
           <button onClick={exportStatusPDF} className="px-6 py-4 bg-orange-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-orange-600 transition-all shadow-lg"><FileCheck size={18}/> Status Report</button>
         </div>
       </div>
