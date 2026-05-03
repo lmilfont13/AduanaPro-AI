@@ -304,7 +304,8 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         const imgProps = doc.getImageProperties(companyLogo);
         const logoH = 20; // 20mm é um tamanho ideal para cabeçalho
         const logoW = (imgProps.width * logoH) / imgProps.height;
-        doc.addImage(companyLogo, 'PNG', 15, 12, logoW, logoH); 
+        const logoFormat = companyLogo.includes('image/png') ? 'PNG' : 'JPEG';
+        doc.addImage(companyLogo, logoFormat, 15, 12, logoW, logoH); 
       } catch(e){}
     }
     
@@ -330,7 +331,8 @@ export default function SupplierPayments({ data, onUpdate }: any) {
           const pProps = doc.getImageProperties(f.productImage);
           const pH = 18;
           const pW = (pProps.width * pH) / pProps.height;
-          doc.addImage(f.productImage, 'JPEG', 15, y, pW, pH); 
+          const imgFormat = f.productImage.includes('image/png') ? 'PNG' : 'JPEG';
+          doc.addImage(f.productImage, imgFormat, 15, y, pW, pH); 
         } catch(e){
           doc.setDrawColor(230); doc.rect(15, y, 18, 18);
         }
