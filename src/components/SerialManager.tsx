@@ -11,7 +11,8 @@ import {
   ArrowRight,
   FileDown,
   ChevronDown,
-  Pencil
+  Pencil,
+  Settings2
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { supabase, IS_SUPABASE_CONFIGURED } from '../lib/supabase';

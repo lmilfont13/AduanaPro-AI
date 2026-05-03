@@ -201,9 +201,13 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       const { error } = await supabase.from('supplier_payments').upsert([{ id: rid, data: record.data }]);
       if (error) {
         console.error("Supabase Save Error:", error);
+        toast.error("Salvo localmente. Falha na nuvem: " + error.message);
+      } else {
+        toast.success("Salvo na Nuvem (Supabase)!");
       }
+    } else {
+      toast.success("Salvo localmente (Offline)");
     }
-    toast.success("Salvo!");
   };
 
   const clearForm = () => {
@@ -236,9 +240,16 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     setHistory(nh);
     localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(nh));
     if (typeof supabase !== 'undefined') {
-      await supabase.from('supplier_payments').delete().eq('id', id);
+      const { error } = await supabase.from('supplier_payments').delete().eq('id', id);
+      if (error) {
+        console.error("Supabase Delete Error:", error);
+        toast.error("Removido localmente. Falha na nuvem: " + error.message);
+      } else {
+        toast.success("Removido da Nuvem (Supabase)!");
+      }
+    } else {
+      toast.success("Registro removido!");
     }
-    toast.success("Registro removido!");
   };
 
   const nextPayments = useMemo(() => {
