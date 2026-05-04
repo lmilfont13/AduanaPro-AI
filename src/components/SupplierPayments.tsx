@@ -165,33 +165,56 @@ export default function SupplierPayments({ data, onUpdate }: any) {
     }
   }, [history]);
 
-  // Auto-cálculo automático quando dados principais mudam
+  // Auto-cálculo agressivo e sincronização total
   useEffect(() => {
-    const parts = form.paymentTerms.split('/').map(p => parseFloat(p));
-    if (parts.length < 2) return;
+    const parts = form.paymentTerms.split('/')
+      .map(p => parseFloat(p.trim()))
+      .filter(p => !isNaN(p));
+    
+    if (parts.length === 0) return;
 
-    setForm(p => {
-      const ms = p.milestones.map((m, i) => {
-        const d = new Date(p.orderDate + 'T12:00:00');
-        // Se for o segundo item ou posterior, soma os dias de produção
-        if (i > 0) d.setDate(d.getDate() + Number(p.productionDays || 0));
+    setForm(prev => {
+      // Criamos a nova estrutura baseada nas partes atuais
+      const newMilestones = parts.map((pct, i) => {
+        const d = new Date(prev.orderDate + 'T12:00:00');
         
-        const newDate = d.toISOString().split('T')[0];
-        const newAmount = (p.contractTotal * (parts[i] || 0)) / 100;
-
-        // Só atualiza se houver mudança real para evitar loops
-        if (m.date !== newDate || m.amount !== newAmount) {
-          return { ...m, date: newDate, amount: newAmount };
+        // Lógica de datas
+        if (i > 0) {
+          if (i === parts.length - 1) {
+            d.setDate(d.getDate() + Number(prev.productionDays || 0));
+          } else {
+            const intermediateDays = Math.floor((Number(prev.productionDays || 0) * i) / (parts.length - 1));
+            d.setDate(d.getDate() + intermediateDays);
+          }
         }
-        return m;
+
+        const newDate = d.toISOString().split('T')[0];
+        const newAmount = (prev.contractTotal * pct) / 100;
+        const newDesc = i === 0 ? `${pct}% Advance` : (i === parts.length - 1 ? `${pct}% Before Shipment` : `${pct}% Intermediate`);
+
+        // Tenta preservar o status de 'isPaid' se a parcela na mesma posição já existia
+        const wasPaid = prev.milestones[i]?.isPaid || false;
+
+        return {
+          id: prev.milestones[i]?.id || Math.random().toString(36).substring(2, 9),
+          description: newDesc,
+          percentage: pct,
+          amount: newAmount,
+          date: newDate,
+          isPaid: wasPaid
+        };
       });
 
-      // Verifica se houve mudança na lista de milestones
-      const hasChanged = ms.some((m, i) => m.date !== p.milestones[i]?.date || m.amount !== p.milestones[i]?.amount);
-      if (hasChanged) return { ...p, milestones: ms };
-      return p;
+      // Verifica se houve mudança real comparando strings para evitar loops infinitos de objetos
+      const currentHash = JSON.stringify(prev.milestones.map(m => ({ d: m.date, a: m.amount, p: m.percentage, ds: m.description })));
+      const newHash = JSON.stringify(newMilestones.map(m => ({ d: m.date, a: m.amount, p: m.percentage, ds: m.description })));
+
+      if (currentHash !== newHash || prev.milestones.length !== newMilestones.length) {
+        return { ...prev, milestones: newMilestones };
+      }
+      return prev;
     });
-  }, [form.orderDate, form.contractTotal, form.productionDays, form.paymentTerms]);
+  }, [form.paymentTerms, form.contractTotal, form.orderDate, form.productionDays]);
 
   const saveRecord = async () => {
     const isNew = !(form as any).id;
@@ -236,10 +259,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       paymentTerms: "30/70",
       productImage: null,
       bankImage: null,
-      milestones: [
-        { id: Math.random().toString(36).substring(2, 9), description: '30% Advance', percentage: 30, amount: 0, date: todayStr, isPaid: false },
-        { id: Math.random().toString(36).substring(2, 9), description: '70% Before Shipment', percentage: 70, amount: 0, date: todayStr, isPaid: false }
-      ]
+      milestones: []
     });
     setSelectedIds([]);
   };
@@ -801,7 +821,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             <input {...iL()} />
             {companyLogo ? <img src={companyLogo} className="w-10 h-10 object-contain" /> : <DollarSign className="text-emerald-400" size={28} />}
           </div>
-          <div><h1 className="text-3xl font-black text-slate-900 uppercase leading-none">Gestão Financeira</h1><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Safe Mode Active</p></div>
+          <div><h1 className="text-3xl font-black text-slate-900 uppercase leading-none">Gestão Financeira</h1><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Safe Mode Active • <span className="text-emerald-500 animate-pulse">Distribuição Dinâmica V2 Ativa</span></p></div>
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={exportData} className="px-4 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-200 transition-all border border-slate-200" title="Exportar Backup"><FileDown size={18}/> Exportar</button>
@@ -879,7 +899,7 @@ export default function SupplierPayments({ data, onUpdate }: any) {
               </div>
             </div>
             <div className="pt-6 border-t border-slate-100 flex gap-4">
-              <div className="flex-1"><label className="text-[9px] font-black text-purple-600 uppercase block">Condição (30/70)</label><input type="text" value={form.paymentTerms} onChange={(e) => setForm(p => ({ ...p, paymentTerms: e.target.value }))} className="w-full p-4 bg-purple-50 rounded-2xl text-[12px] font-black text-purple-900 border-none outline-none focus:ring-2 ring-purple-500/20" /></div>
+              <div className="flex-1"><label className="text-[9px] font-black text-purple-600 uppercase block">Condição ({form.paymentTerms})</label><input type="text" value={form.paymentTerms} onChange={(e) => setForm(p => ({ ...p, paymentTerms: e.target.value }))} className="w-full p-4 bg-purple-50 rounded-2xl text-[12px] font-black text-purple-900 border-none outline-none focus:ring-2 ring-purple-500/20" /></div>
               <div className="flex-1"><label className="text-[9px] font-black text-slate-400 uppercase block">Responsável</label><input type="text" value={form.recipientName} onChange={(e) => setForm(p => ({ ...p, recipientName: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[12px] font-black text-slate-900 border-none outline-none focus:ring-2 ring-blue-500/20" /></div>
             </div>
           </div>
