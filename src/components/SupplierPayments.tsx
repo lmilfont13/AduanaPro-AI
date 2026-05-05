@@ -392,13 +392,16 @@ export default function SupplierPayments({ data, onUpdate }: any) {
         return new Date(a.date + 'T12:00:00').getTime() - new Date(b.date + 'T12:00:00').getTime();
       });
 
-      const tableData = sortedMilestones.map((m: any) => [
-        new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR'),
-        m.description?.toUpperCase(),
-        m.isPaid ? 'PAGO' : 'PENDENTE',
-        `${m.percentage}%`,
-        `$ ${Number(m.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      ]);
+      const tableData = sortedMilestones.map((m: any) => {
+        const realPct = f.contractTotal > 0 ? Math.round((Number(m.amount) / Number(f.contractTotal)) * 100) : m.percentage;
+        return [
+          new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR'),
+          m.description?.toUpperCase(),
+          m.isPaid ? 'PAGO' : 'PENDENTE',
+          `${realPct}%`,
+          `$ ${Number(m.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        ];
+      });
 
       autoTable(doc, {
         startY: y,
@@ -759,17 +762,20 @@ export default function SupplierPayments({ data, onUpdate }: any) {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...form.milestones].sort((a:any,b:any) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((m: any, i: number) => (
-                    <tr key={i} className={`border-b border-slate-100 ${m.isPaid ? 'bg-yellow-50/50 border-l-4 border-l-yellow-400' : 'bg-white border-l-4 border-l-transparent'}`}>
-                      <td className="py-4 px-4">
-                        <p className="text-[11px] font-bold text-slate-700">{m.date}</p>
-                        <p className={`text-[8px] font-black uppercase mt-1 ${m.isPaid ? 'text-emerald-500' : 'text-slate-400'}`}>{m.isPaid ? t.confirmed : t.awaiting}</p>
-                      </td>
-                      <td className="py-4 px-4 text-[11px] font-medium text-slate-600">{m.description}</td>
-                      <td className="py-4 px-4 text-[11px] font-bold text-slate-600 text-center">{m.percentage}%</td>
-                      <td className="py-4 px-4 text-[11px] font-black text-slate-900 text-right">USD {Number(m.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    </tr>
-                  ))}
+                  {[...form.milestones].sort((a:any,b:any) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((m: any, i: number) => {
+                    const realPct = totalContract > 0 ? Math.round((Number(m.amount) / totalContract) * 100) : m.percentage;
+                    return (
+                      <tr key={i} className={`border-b border-slate-100 ${m.isPaid ? 'bg-yellow-50/50 border-l-4 border-l-yellow-400' : 'bg-white border-l-4 border-l-transparent'}`}>
+                        <td className="py-4 px-4">
+                          <p className="text-[11px] font-bold text-slate-700">{m.date}</p>
+                          <p className={`text-[8px] font-black uppercase mt-1 ${m.isPaid ? 'text-emerald-500' : 'text-slate-400'}`}>{m.isPaid ? t.confirmed : t.awaiting}</p>
+                        </td>
+                        <td className="py-4 px-4 text-[11px] font-medium text-slate-600">{m.description}</td>
+                        <td className="py-4 px-4 text-[11px] font-bold text-slate-600 text-center">{realPct}%</td>
+                        <td className="py-4 px-4 text-[11px] font-black text-slate-900 text-right">USD {Number(m.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -904,7 +910,12 @@ export default function SupplierPayments({ data, onUpdate }: any) {
             </div>
           </div>
 
-          <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100"><h2 className="text-[12px] font-black text-slate-800 uppercase tracking-widest mb-6 flex items-center gap-2"><CheckCircle size={18} className="text-emerald-500" /> Milestones</h2><div className="space-y-4">{form.milestones.map((m: Milestone) => (<div key={m.id} className="p-4 rounded-[28px] border bg-slate-50 border-slate-100"><div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end"><div><label className="text-[8px] font-black text-slate-400 uppercase">Fase</label><input type="text" value={m.description} onChange={(e) => updateMilestone(m.id, { description: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black uppercase outline-none" /></div><div><label className="text-[8px] font-black text-slate-400 uppercase">Data</label><input type="date" value={m.date} onChange={(e) => updateMilestone(m.id, { date: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black outline-none" /></div><div><label className="text-[8px] font-black text-slate-400 uppercase">USD $</label><input type="number" value={m.amount} onChange={(e) => updateMilestone(m.id, { amount: Number(e.target.value) })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[11px] font-black outline-none" /></div><div className="flex gap-2">
+          <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100"><h2 className="text-[12px] font-black text-slate-800 uppercase tracking-widest mb-6 flex items-center gap-2"><CheckCircle size={18} className="text-emerald-500" /> Milestones</h2><div className="space-y-4">{form.milestones.map((m: Milestone) => (<div key={m.id} className="p-4 rounded-[28px] border bg-slate-50 border-slate-100"><div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end"><div><label className="text-[8px] font-black text-slate-400 uppercase">Fase</label><input type="text" value={m.description} onChange={(e) => updateMilestone(m.id, { description: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black uppercase outline-none" /></div><div><label className="text-[8px] font-black text-slate-400 uppercase">Data</label><input type="date" value={m.date} onChange={(e) => updateMilestone(m.id, { date: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black outline-none" /></div><div><label className="text-[8px] font-black text-slate-400 uppercase">USD $</label><input type="number" value={m.amount} onChange={(e) => {
+  const newAmount = Number(e.target.value);
+  const total = Number(form.contractTotal) || 1;
+  const newPct = Math.round((newAmount / total) * 100);
+  updateMilestone(m.id, { amount: newAmount, percentage: newPct });
+}} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[11px] font-black outline-none" /></div><div className="flex gap-2">
   <button onClick={() => updateMilestone(m.id, { isPaid: !m.isPaid })} className={`flex-1 p-2 rounded-lg text-[9px] font-black uppercase transition-all shadow-sm ${m.isPaid ? 'bg-emerald-500 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>{m.isPaid ? 'PAGO' : 'PEND'}</button>
   <button onClick={() => sendWhatsapp({...m, ref: form.ciNumber})} className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all border border-emerald-100"><MessageSquare size={16}/></button>
   <button onClick={() => setForm(p => ({ ...p, milestones: p.milestones.filter(x => x.id !== m.id) }))} className="w-10 h-10 bg-red-50 text-red-400 rounded-lg flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
