@@ -65,6 +65,8 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   const [visualLanguage, setVisualLanguage] = useState<'PT' | 'EN'>('EN');
   const [whatsappText, setWhatsappText] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkInput, setBulkInput] = useState("");
   
   const companyLogo = useMemo(() => {
     try { return localStorage.getItem('ADUANAPRO_COMPANY_LOGO'); } catch(e) { return null; }
@@ -156,6 +158,65 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   const addMilestone = () => {
     const n: Milestone = { id: Math.random().toString(36).substring(2, 9), description: "Phase", percentage: 0, amount: 0, isPaid: false, date: todayStr };
     setForm(p => ({ ...p, milestones: [...p.milestones, n] }));
+  };
+
+  const processBulkImport = async (input: string | File) => {
+    setLoading(true);
+    try {
+      let content = "";
+      let fileType = "";
+      
+      if (typeof input !== 'string') {
+        const text = await extractTextFromPDF(input);
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve) => { reader.onload = () => resolve(reader.result as string); });
+        reader.readAsDataURL(input);
+        content = await base64Promise;
+        fileType = input.type;
+      } else {
+        content = input;
+      }
+
+      const prompt = `Extraia os pagamentos desta tabela/imagem. Retorne APENAS um JSON array de objetos com: 
+      { "description": "Phase X", "percentage": number, "amount": number, "date": "YYYY-MM-DD", "isPaid": true }.
+      Ignore câmbio e valores BRL. Foque em % (percentual), Valor USD e Data Pgto. 
+      Se for imagem, use OCR interno. Dados: ${content}`;
+
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: "llama-3.2-11b-vision-preview",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.1,
+          response_format: { type: "json_object" }
+        })
+      });
+
+      const resJson = await response.json();
+      const extracted = JSON.parse(resJson.choices[0].message.content).milestones || JSON.parse(resJson.choices[0].message.content).pagamentos || Object.values(JSON.parse(resJson.choices[0].message.content))[0];
+      
+      if (Array.isArray(extracted)) {
+        const mapped = extracted.map((m: any) => ({
+          id: Math.random().toString(36).substring(2, 9),
+          description: m.description || "Parcela Importada",
+          percentage: Number(m.percentage || 0),
+          amount: Number(m.amount || 0),
+          isPaid: m.isPaid !== undefined ? m.isPaid : true,
+          date: m.date || todayStr
+        }));
+        setForm(p => ({ ...p, milestones: mapped }));
+        toast.success(`${mapped.length} parcelas importadas!`);
+        setShowBulkImport(false);
+      }
+    } catch (e) {
+      toast.error("Erro ao processar lote. Tente colar apenas o texto da tabela.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Seleção automática ao carregar
@@ -292,11 +353,19 @@ export default function SupplierPayments({ data, onUpdate }: any) {
 
   const nextPayments = useMemo(() => {
     if (selectedIds.length === 0) return [];
-    return history.filter(h => selectedIds.includes(h.id)).map(r => {
-      const ms = r.data?.milestones || [];
-      const pendings = ms.filter((m: any) => !m.isPaid).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      return pendings.length > 0 ? { ...pendings[0], supplier: r.data?.supplierName, ref: r.data?.ciNumber, parentTotal: r.data?.contractTotal, productImage: r.data?.productImage } : null;
-    }).filter(Boolean).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return history.filter(h => selectedIds.includes(h.id)).flatMap(h => {
+      const milestones = h.data?.milestones || [];
+      return milestones
+        .map((m: any, idx: number) => ({ 
+          ...m, 
+          ref: h.data.ciNumber, 
+          supplier: h.data.supplierName, 
+          productImage: h.data.productImage,
+          pIndex: idx + 1,
+          pTotal: milestones.length
+        }))
+        .filter((m: any) => !m.isPaid);
+    }).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [selectedIds, history]);
 
   const exportNextPDF = () => {
@@ -799,6 +868,68 @@ export default function SupplierPayments({ data, onUpdate }: any) {
           </div>
         </div>
       )}
+      {showBulkImport && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[300] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-3xl rounded-[48px] shadow-2xl overflow-hidden animate-in zoom-in duration-300 border border-white/20">
+            <div className="p-10 bg-blue-600 text-white flex justify-between items-center relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+              <div className="relative z-10">
+                <h2 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-3"><Zap size={28} className="text-yellow-400 fill-yellow-400"/> Lançamento em Lote (IA)</h2>
+                <p className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-70">Cole o texto da tabela ou arraste um print do sistema</p>
+              </div>
+              <button onClick={() => setShowBulkImport(false)} className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center hover:bg-white/20 transition-all relative z-10"><X size={24}/></button>
+            </div>
+            <div className="p-10 space-y-8">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Texto da Tabela (Ctrl+V)</label>
+                   <span className="text-[8px] font-bold text-blue-500 uppercase px-2 py-1 bg-blue-50 rounded-lg">Focado em %, USD e Data</span>
+                </div>
+                <textarea 
+                  value={bulkInput}
+                  onChange={(e) => setBulkInput(e.target.value)}
+                  placeholder="Cole aqui o texto copiado da sua planilha, Excel ou outro sistema..."
+                  className="w-full h-40 p-6 bg-slate-50 border-2 border-slate-100 rounded-3xl text-[12px] font-bold text-slate-600 outline-none focus:border-blue-400 transition-all resize-none shadow-inner"
+                />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="p-8 border-2 border-dashed border-slate-200 rounded-[32px] flex flex-col items-center justify-center gap-4 hover:bg-slate-50 transition-all cursor-pointer relative group overflow-hidden">
+                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer z-20" onChange={(e) => e.target.files?.[0] && processBulkImport(e.target.files[0])} />
+                    <div className="w-14 h-14 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-all relative z-10"><ImageIcon size={28} /></div>
+                    <div className="text-center relative z-10">
+                      <p className="text-[10px] font-black text-slate-800 uppercase">Arraste um Print</p>
+                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">Extração Instantânea</p>
+                    </div>
+                 </div>
+                 
+                 <div className="flex flex-col justify-center gap-4">
+                    <button 
+                      onClick={() => processBulkImport(bulkInput)}
+                      disabled={loading || !bulkInput.trim()}
+                      className="w-full py-6 bg-slate-900 text-white rounded-[28px] font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-3"
+                    >
+                      {loading ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          <span>Processando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap size={18} className="text-yellow-400 fill-yellow-400" />
+                          <span>Iniciar Importação</span>
+                        </>
+                      )}
+                    </button>
+                    <p className="text-[8px] font-bold text-slate-400 text-center uppercase tracking-widest px-4 leading-relaxed">
+                      DICA: Copie a tabela inteira do seu sistema. Nossa IA irá ignorar o que não for financeiro.
+                    </p>
+                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {showMsg && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
@@ -919,7 +1050,12 @@ export default function SupplierPayments({ data, onUpdate }: any) {
   <button onClick={() => updateMilestone(m.id, { isPaid: !m.isPaid })} className={`flex-1 p-2 rounded-lg text-[9px] font-black uppercase transition-all shadow-sm ${m.isPaid ? 'bg-emerald-500 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>{m.isPaid ? 'PAGO' : 'PEND'}</button>
   <button onClick={() => sendWhatsapp({...m, ref: form.ciNumber})} className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all border border-emerald-100"><MessageSquare size={16}/></button>
   <button onClick={() => setForm(p => ({ ...p, milestones: p.milestones.filter(x => x.id !== m.id) }))} className="w-10 h-10 bg-red-50 text-red-400 rounded-lg flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
-</div></div></div>))}</div><button onClick={addMilestone} className="mt-6 w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-[10px] font-black text-slate-400 uppercase transition-all hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition-all">+ Add Parcela</button></div>
+</div></div></div>))}</div>
+  <div className="mt-6 flex gap-3">
+    <button onClick={addMilestone} className="flex-1 py-4 border-2 border-dashed border-slate-200 rounded-2xl text-[10px] font-black text-slate-400 uppercase transition-all hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition-all">+ Add Parcela</button>
+    <button onClick={() => setShowBulkImport(true)} className="px-6 py-4 bg-blue-50 text-blue-600 border-2 border-dashed border-blue-200 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-blue-100 transition-all"><Zap size={16}/> Importar Lote (IA)</button>
+  </div>
+</div>
         </div>
 
         <div className="lg:col-span-4 space-y-8">
@@ -948,7 +1084,10 @@ export default function SupplierPayments({ data, onUpdate }: any) {
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-center mb-0.5">
-                      <span className="text-[9px] font-black text-emerald-400 uppercase truncate pr-2">{p.ref}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-black text-emerald-400 uppercase truncate pr-2">{p.ref}</span>
+                        <span className="bg-blue-500/20 text-blue-400 text-[8px] font-black px-1.5 py-0.5 rounded-md">{p.pIndex}/{p.pTotal}</span>
+                      </div>
                       <span className={`text-[9px] font-black font-mono shrink-0 ${isUrgent ? 'text-red-400' : isClosest ? 'text-yellow-400' : 'text-slate-400'}`}>{new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
                     </div>
                     <div className="flex items-center gap-2 mb-0.5">
@@ -987,7 +1126,25 @@ export default function SupplierPayments({ data, onUpdate }: any) {
               </button>
             </div>
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              {Array.isArray(history) && history.map((h: any) => (<div key={h.id} className="flex items-center gap-2 group"><div onClick={() => setSelectedIds(prev => prev.includes(h.id) ? prev.filter(id => id !== h.id) : [...prev, h.id])} className={`w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer transition-all ${selectedIds.includes(h.id) ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>{selectedIds.includes(h.id) ? <CheckSquare size={14}/> : <Square size={14}/>}</div><div onClick={() => setForm({ ...h.data, id: h.id })} className="flex-1 p-4 rounded-2xl border bg-slate-50 border-slate-100 cursor-pointer hover:bg-slate-100 transition-all"><p className="text-[10px] font-black text-slate-900 uppercase truncate">{h.data?.ciNumber || "N/A"}</p><p className="text-[9px] font-bold text-slate-500 truncate">{h.data?.supplierName}</p></div><button onClick={() => deleteRecord(h.id)} className="w-8 h-8 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button></div>))}
+              {Array.isArray(history) && history.map((h: any) => {
+                const totalM = h.data?.milestones?.length || 0;
+                const paidM = h.data?.milestones?.filter((m: any) => m.isPaid).length || 0;
+                return (
+                  <div key={h.id} className="flex items-center gap-2 group">
+                    <div onClick={() => setSelectedIds(prev => prev.includes(h.id) ? prev.filter(id => id !== h.id) : [...prev, h.id])} className={`w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer transition-all ${selectedIds.includes(h.id) ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>
+                      {selectedIds.includes(h.id) ? <CheckSquare size={14}/> : <Square size={14}/>}
+                    </div>
+                    <div onClick={() => setForm({ ...h.data, id: h.id })} className="flex-1 p-4 rounded-2xl border bg-slate-50 border-slate-100 cursor-pointer hover:bg-slate-100 transition-all">
+                      <div className="flex justify-between items-start">
+                        <p className="text-[10px] font-black text-slate-900 uppercase truncate">{h.data?.ciNumber || "N/A"}</p>
+                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${paidM === totalM ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>{paidM}/{totalM}</span>
+                      </div>
+                      <p className="text-[9px] font-bold text-slate-500 truncate">{h.data?.supplierName}</p>
+                    </div>
+                    <button onClick={() => deleteRecord(h.id)} className="w-8 h-8 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button>
+                  </div>
+                );
+              })}
               {history.length === 0 && <div className="text-center py-10 opacity-20"><History className="mx-auto mb-2" size={24}/><p className="text-[8px] font-black uppercase">Histórico Vazio</p></div>}
             </div>
           </div>
