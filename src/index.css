@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F8F9FC;
+  --foreground: #0F172A;
+  --primary: #f97316;
+  --border: #E2E8F0;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--border);
+}
+
+.custom-scrollbar::-webkit-scrollbar { width: 5px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
+
+.font-mono-technical {
+  font-family: 'Roboto Mono', monospace !important;
+  letter-spacing: -0.01em !important;
+}
+
+.calculation-box {
+  font-family: 'Roboto Mono', monospace !important;
+  background: #f1f8e9 !important; /* Verde ultra suave */
+  border: 1px solid #dcedc8 !important;
+  color: #33691e !important; /* Verde oliva escuro */
+  padding: 1.5rem;
+  border-radius: 1rem;
+  line-height: 1.6;
+  font-size: 0.9rem;
+}

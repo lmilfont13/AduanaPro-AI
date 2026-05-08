@@ -1,0 +1,1181 @@
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useDropzone } from 'react-dropzone';
+import { 
+  Plus, 
+  Trash2, 
+  Upload, 
+  FileText, 
+  CheckCircle, 
+  Clock, 
+  FileDown,
+  DollarSign,
+  Calendar,
+  MessageSquare,
+  Save,
+  FolderOpen,
+  Cloud,
+  RefreshCw,
+  Calculator,
+  Building2,
+  Globe,
+  User,
+  Zap,
+  TrendingUp,
+  ShieldCheck,
+  ArrowRight,
+  X,
+  History,
+  Image as ImageIcon,
+  LayoutGrid,
+  Landmark,
+  Ship,
+  Settings2,
+  Download,
+  BarChart3,
+  AlertCircle,
+  Filter,
+  CheckSquare,
+  Square,
+  Eraser,
+  Globe2,
+  FileCheck,
+  PenTool,
+  Copy
+} from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { parsePaymentReceiptWithGroq, parseMilestonesWithGroq } from '../services/groqService';
+import { extractTextFromPDF } from '../services/pdfService';
+import { toast } from 'sonner';
+import { supabase } from '../lib/supabase';
+
+interface Milestone {
+  id: string;
+  description: string;
+  percentage: number;
+  amount: number;
+  isPaid: boolean;
+  date: string;
+}
+
+export default function SupplierPayments({ data, onUpdate }: any) {
+  const [loading, setLoading] = useState(false);
+  const [showMsg, setShowMsg] = useState(false);
+  const [showVisualReport, setShowVisualReport] = useState(false);
+  const [visualLanguage, setVisualLanguage] = useState<'PT' | 'EN'>('EN');
+  const [whatsappText, setWhatsappText] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkInput, setBulkInput] = useState("");
+  
+  const companyLogo = useMemo(() => {
+    try { return localStorage.getItem('ADUANAPRO_COMPANY_LOGO'); } catch(e) { return null; }
+  }, []);
+
+  const getTodayLocal = () => {
+    const d = new Date();
+    const offset = d.getTimezoneOffset();
+    const local = new Date(d.getTime() - (offset * 60 * 1000));
+    return local.toISOString().split('T')[0];
+  };
+  const todayStr = getTodayLocal();
+
+  const [form, setForm] = useState({
+    id: data?.id || "",
+    supplierName: data?.supplierName || "FORNECEDOR N/I",
+    ciNumber: data?.ciNumber || "N/E",
+    contractTotal: Number(data?.contractTotal || 0),
+    currency: data?.currency || "USD",
+    containerNumber: data?.containerNumber || "N/E",
+    exchangeRate: Number(data?.exchangeRate || 0),
+    productName: data?.productName || "",
+    bankDetails: data?.bankDetails || "",
+    recipientName: data?.recipientName || "Eveline",
+    orderDate: data?.orderDate || new Date().toISOString().split('T')[0],
+    productionDays: Number(data?.productionDays || 30),
+    paymentTerms: data?.paymentTerms || "30/70",
+    productImage: data?.productImage || null as string | null,
+    bankImage: data?.bankImage || null as string | null,
+    milestones: (Array.isArray(data?.milestones) ? data.milestones : []).map((m: any) => ({
+      ...m,
+      id: m.id || Math.random().toString(36).substring(2, 9),
+      amount: Number(m.amount || 0),
+      percentage: Number(m.percentage || 0),
+      isPaid: !!m.isPaid,
+      date: m.date || new Date().toISOString().split('T')[0]
+    })) as Milestone[]
+  });
+
+  const [history, setHistory] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      let localData: any[] = [];
+      try {
+        const saved = localStorage.getItem('ADUANAPRO_PAYMENTS_HISTORY');
+        if (saved) localData = JSON.parse(saved);
+      } catch (e) {}
+
+      if (typeof supabase !== 'undefined') {
+        // Removido .order('created_at') para evitar falhas caso a tabela simples não tenha a coluna
+        const { data, error } = await supabase.from('supplier_payments').select('*');
+        if (!error && data) {
+          if (data.length === 0 && localData.length > 0) {
+            setHistory(localData);
+            const rowsToInsert = localData.map(h => ({ id: h.id, data: h.data }));
+            supabase.from('supplier_payments').upsert(rowsToInsert).then();
+            return;
+          }
+          if (data.length > 0) {
+            // Inverte a ordem para mostrar os mais recentes primeiro, já que não tem order by no SQL
+            const reversed = data.map(r => ({ id: r.id, data: r.data })).reverse();
+            setHistory(reversed);
+            return;
+          }
+        }
+      }
+      
+      if (localData.length > 0) setHistory(localData);
+    };
+    fetchHistory();
+  }, []);
+
+  // Sincronização Segura
+  // Salvamento manual via botão para evitar loops de reinicialização
+  const lastUpdateRef = useRef("");
+
+  // Câmbio
+  useEffect(() => {
+    if (!form.exchangeRate) {
+      fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL').then(res => res.json()).then(json => setForm(p => ({ ...p, exchangeRate: parseFloat(json.USDBRL.bid) }))).catch(() => {});
+    }
+  }, []);
+
+  const updateMilestone = (id: string, updates: Partial<Milestone>) => {
+    setForm(p => ({ ...p, milestones: p.milestones.map(m => m.id === id ? { ...m, ...updates } : m) }));
+  };
+
+  const addMilestone = () => {
+    const n: Milestone = { id: Math.random().toString(36).substring(2, 9), description: "Phase", percentage: 0, amount: 0, isPaid: false, date: todayStr };
+    setForm(p => ({ ...p, milestones: [...p.milestones, n] }));
+  };
+
+  const processBulkImport = async (input: string | File) => {
+    setLoading(true);
+    try {
+      let result;
+      if (typeof input !== 'string') {
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve) => {
+          reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        });
+        reader.readAsDataURL(input);
+        const base64 = await base64Promise;
+        result = await parseMilestonesWithGroq({ base64, mimeType: input.type });
+      } else {
+        result = await parseMilestonesWithGroq(input);
+      }
+
+      const extracted = result.milestones || result.pagamentos || Object.values(result)[0];
+      
+      if (Array.isArray(extracted)) {
+        const mapped = extracted.map((m: any) => ({
+          id: Math.random().toString(36).substring(2, 9),
+          description: m.description || "Importado",
+          percentage: Number(m.percentage || 0),
+          amount: Number(m.amount || 0),
+          isPaid: m.isPaid !== undefined ? m.isPaid : false,
+          date: m.date || todayStr
+        }));
+        setForm(p => ({ ...p, milestones: mapped }));
+        lastCalculatedHashRef.current = JSON.stringify(mapped.map(m => ({ d: m.date, a: m.amount, p: m.percentage })));
+        toast.success(`${mapped.length} parcelas importadas!`);
+        setShowBulkImport(false);
+        setBulkInput("");
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error(`Falha na IA: ${e.message}. Tente colar o texto.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Seleção automática ao carregar
+  useEffect(() => {
+    if (history.length > 0 && selectedIds.length === 0) {
+      setSelectedIds(history.map(h => h.id));
+    }
+  }, [history]);
+
+  const lastCalculatedHashRef = useRef("");
+
+  // Auto-cálculo inteligente e sincronização total
+  useEffect(() => {
+    if (!form.paymentTerms) return;
+    
+    const parts = form.paymentTerms.split('/')
+      .map(p => parseFloat(p.trim()))
+      .filter(p => !isNaN(p));
+    
+    if (parts.length === 0) return;
+
+    // Calculamos o que seriam as novas milestones baseadas nos termos
+    const calculatedMilestones = parts.map((pct, i) => {
+      const d = new Date(form.orderDate + 'T12:00:00');
+      if (i > 0) {
+        if (i === parts.length - 1) {
+          d.setDate(d.getDate() + Number(form.productionDays || 0));
+        } else {
+          const intermediateDays = Math.floor((Number(form.productionDays || 0) * i) / (parts.length - 1));
+          d.setDate(d.getDate() + intermediateDays);
+        }
+      }
+      const newDate = d.toISOString().split('T')[0];
+      const newAmount = (form.contractTotal * pct) / 100;
+      const newDesc = i === 0 ? `${pct}% Advance` : (i === parts.length - 1 ? `${pct}% Before Shipment` : `${pct}% Intermediate`);
+
+      return {
+        id: form.milestones[i]?.id || Math.random().toString(36).substring(2, 9),
+        description: newDesc,
+        percentage: pct,
+        amount: newAmount,
+        date: newDate,
+        isPaid: form.milestones[i]?.isPaid || false
+      };
+    });
+
+    const newHash = JSON.stringify(calculatedMilestones.map(m => ({ d: m.date, a: m.amount, p: m.percentage })));
+    const currentHash = JSON.stringify(form.milestones.map(m => ({ d: m.date, a: m.amount, p: m.percentage })));
+
+    // SÓ atualizamos se:
+    // 1. O hash calculado mudou em relação ao ÚLTIMO que NÓS calculamos (mudança nos termos/total/data)
+    // 2. E o hash atual ainda é igual ao último calculado (o usuário não mudou nada manualmente)
+    // OU se o formulário for novo e não tiver milestones
+    
+    const termsChanged = lastCalculatedHashRef.current !== newHash;
+    const isUserModified = lastCalculatedHashRef.current !== currentHash && lastCalculatedHashRef.current !== "";
+
+    if (termsChanged && (!isUserModified || form.milestones.length === 0)) {
+      setForm(prev => ({ ...prev, milestones: calculatedMilestones }));
+      lastCalculatedHashRef.current = newHash;
+    }
+  }, [form.paymentTerms, form.contractTotal, form.orderDate, form.productionDays]);
+
+  const saveRecord = async () => {
+    const isNew = !(form as any).id;
+    const rid = (form as any).id || `R_${Date.now()}`;
+    const record = { id: rid, data: { ...form, id: rid } };
+    const nh = [ record, ...history.filter(h => h.id !== rid) ];
+    setHistory(nh);
+    localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(nh));
+    
+    // Atualiza o ID no formulário atual para que próximos saves apenas atualizem
+    if (isNew) {
+      setForm(p => ({ ...p, id: rid }));
+    }
+    
+    if (typeof supabase !== 'undefined') {
+      const { error } = await supabase.from('supplier_payments').upsert([{ id: rid, data: record.data }]);
+      if (error) {
+        console.error("Supabase Save Error:", error);
+        toast.error("Salvo localmente. Falha na nuvem: " + error.message);
+      } else {
+        toast.success("Salvo na Nuvem (Supabase)!");
+      }
+    } else {
+      toast.success("Salvo localmente (Offline)");
+    }
+  };
+
+  const clearForm = () => {
+    setForm({
+      id: '',
+      supplierName: "FORNECEDOR N/I",
+      ciNumber: "N/E",
+      contractTotal: 0,
+      currency: "USD",
+      containerNumber: "N/E",
+      exchangeRate: 0,
+      productName: "",
+      bankDetails: "",
+      recipientName: "Eveline",
+      orderDate: todayStr,
+      productionDays: 30,
+      paymentTerms: "30/70",
+      productImage: null,
+      bankImage: null,
+      milestones: []
+    });
+    setSelectedIds([]);
+  };
+
+  const duplicateRecord = () => {
+    if (!form.id) {
+      toast.error("Salve o registro antes de duplicar.");
+      return;
+    }
+    setForm(p => ({ ...p, id: '' }));
+    toast.success("Registro duplicado! Altere os dados e clique em 'Salvar Novo'.");
+  };
+
+  const deleteRecord = async (id: string) => {
+    const nh = history.filter(x => x.id !== id);
+    setHistory(nh);
+    localStorage.setItem('ADUANAPRO_PAYMENTS_HISTORY', JSON.stringify(nh));
+    if (typeof supabase !== 'undefined') {
+      const { error } = await supabase.from('supplier_payments').delete().eq('id', id);
+      if (error) {
+        console.error("Supabase Delete Error:", error);
+        toast.error("Removido localmente. Falha na nuvem: " + error.message);
+      } else {
+        toast.success("Removido da Nuvem (Supabase)!");
+      }
+    } else {
+      toast.success("Registro removido!");
+    }
+  };
+
+  const nextPayments = useMemo(() => {
+    if (selectedIds.length === 0) return [];
+    return history.filter(h => selectedIds.includes(h.id)).flatMap(h => {
+      const milestones = h.data?.milestones || [];
+      return milestones
+        .map((m: any, idx: number) => ({ 
+          ...m, 
+          ref: h.data.ciNumber, 
+          supplier: h.data.supplierName, 
+          productImage: h.data.productImage,
+          pIndex: idx + 1,
+          pTotal: milestones.length
+        }))
+        .filter((m: any) => !m.isPaid);
+    }).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [selectedIds, history]);
+
+  const exportNextPDF = () => {
+    const doc = new jsPDF() as any;
+    const table = nextPayments.map((p: any) => [new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR'), p.supplier, p.ref, `$ ${p.amount.toLocaleString('pt-BR')}`]);
+    autoTable(doc, { head: [['DATA', 'FORNECEDOR', 'REF', 'VALOR USD']], body: table });
+    doc.save("Cronograma.pdf");
+  };
+
+  const exportStatusPDF = () => {
+    const selectedRecords = history.filter(h => selectedIds.includes(h.id));
+    if (selectedRecords.length === 0) {
+      toast.error("Selecione ao menos um item no histórico para exportar.");
+      return;
+    }
+
+    const doc = new jsPDF() as any;
+    const pw = doc.internal.pageSize.width;
+    const ph = doc.internal.pageSize.height;
+    let y = 15;
+
+    // Cabeçalho Principal Equilibrado
+    if (companyLogo) {
+      try { 
+        const imgProps = doc.getImageProperties(companyLogo);
+        const logoH = 20; // 20mm é um tamanho ideal para cabeçalho
+        const logoW = (imgProps.width * logoH) / imgProps.height;
+        const logoFormat = companyLogo.includes('image/png') ? 'PNG' : 'JPEG';
+        doc.addImage(companyLogo, logoFormat, 15, 12, logoW, logoH); 
+      } catch(e){}
+    }
+    
+    doc.setFontSize(18);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.text("RELATÓRIO CONSOLIDADO DE STATUS", pw / 2, 22, { align: 'center' });
+    
+    y = 40; // Começo do conteúdo logo após o cabeçalho
+
+    selectedRecords.forEach((record, index) => {
+      const f = record.data;
+      const estimatedHeight = 60 + (f.milestones?.length || 0) * 8;
+
+      if (y + estimatedHeight > ph - 25) {
+        doc.addPage();
+        y = 15;
+      }
+
+      // Foto com Proporção Mantida
+      if (f.productImage) {
+        try { 
+          const pProps = doc.getImageProperties(f.productImage);
+          const pH = 18;
+          const pW = (pProps.width * pH) / pProps.height;
+          const imgFormat = f.productImage.includes('image/png') ? 'PNG' : 'JPEG';
+          doc.addImage(f.productImage, imgFormat, 15, y, pW, pH); 
+        } catch(e){
+          doc.setDrawColor(230); doc.rect(15, y, 18, 18);
+        }
+      }
+
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      // Nome do fornecedor alinhado ao topo da imagem (y) e mais próximo (38)
+      doc.text(f.supplierName?.toUpperCase() || "FORNECEDOR N/I", 38, y + 3);
+      
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100);
+      doc.text(`CI: ${f.ciNumber || "N/E"} | CTN: ${f.containerNumber || "N/E"}`, 38, y + 8);
+      
+      const totalPaid = (f.milestones || []).filter((m: any) => m.isPaid).reduce((acc: number, cur: any) => acc + Number(cur.amount), 0);
+      const totalPending = Number(f.contractTotal || 0) - totalPaid;
+      
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      // Distribuição financeira alinhada com a estrutura da página
+      doc.setTextColor(15, 23, 42);
+      doc.text(`TOTAL: $ ${Number(f.contractTotal || 0).toLocaleString('en-US')}`, 38, y + 14);
+      
+      doc.setTextColor(16, 185, 129);
+      doc.text(`PAGO: $ ${totalPaid.toLocaleString('en-US')}`, pw / 2, y + 14, { align: 'center' });
+      
+      doc.setTextColor(244, 63, 94);
+      doc.text(`SALDO: $ ${totalPending.toLocaleString('en-US')}`, pw - 15, y + 14, { align: 'right' });
+
+      y += 18;
+
+      const sortedMilestones = [...(f.milestones || [])].sort((a: any, b: any) => {
+        if (a.isPaid && !b.isPaid) return -1;
+        if (!a.isPaid && b.isPaid) return 1;
+        return new Date(a.date + 'T12:00:00').getTime() - new Date(b.date + 'T12:00:00').getTime();
+      });
+
+      const tableData = sortedMilestones.map((m: any) => {
+        const realPct = f.contractTotal > 0 ? Math.round((Number(m.amount) / Number(f.contractTotal)) * 100) : m.percentage;
+        return [
+          new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR'),
+          m.description?.toUpperCase(),
+          m.isPaid ? 'PAGO' : 'PENDENTE',
+          `${realPct}%`,
+          `$ ${Number(m.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        ];
+      });
+
+      autoTable(doc, {
+        startY: y,
+        margin: { left: 15, right: 15 },
+        head: [['DATA', 'FASE', 'STATUS', '%', 'VALOR USD']],
+        body: tableData,
+        theme: 'plain',
+        styles: { fontSize: 7, cellPadding: 1.5 },
+        headStyles: { 
+          fillColor: [241, 245, 249], 
+          textColor: [71, 85, 105], 
+          fontStyle: 'bold',
+          halign: 'left' // Reset padrão para customizar abaixo
+        },
+        columnStyles: { 
+          0: { halign: 'center', cellWidth: 25 },
+          1: { halign: 'left' },
+          2: { halign: 'center', fontStyle: 'bold', cellWidth: 25 },
+          3: { halign: 'center', cellWidth: 15 },
+          4: { halign: 'right', fontStyle: 'bold', cellWidth: 35 }
+        },
+        // Sincroniza alinhamento do Header com o Body
+        didParseCell: (data) => {
+          if (data.section === 'head') {
+            if (data.column.index === 0) data.cell.styles.halign = 'center';
+            if (data.column.index === 2) data.cell.styles.halign = 'center';
+            if (data.column.index === 3) data.cell.styles.halign = 'center';
+            if (data.column.index === 4) data.cell.styles.halign = 'right';
+          }
+        },
+        didDrawCell: (data) => {
+          if (data.section === 'body' && data.column.index === 2) {
+            const status = data.cell.raw;
+            if (status === 'PAGO') doc.setTextColor(16, 185, 129);
+            else doc.setTextColor(244, 63, 94);
+          }
+        }
+      });
+
+      y = (doc as any).lastAutoTable.finalY + 10;
+    });
+
+    // --- SEÇÃO DE RESUMO MENSAL (FLUXO DE CAIXA) ---
+    const monthlySummary: Record<string, { label: string, amount: number }> = {};
+    
+    selectedRecords.forEach(record => {
+      const ms = record.data?.milestones || [];
+      ms.forEach((m: any) => {
+        if (!m.isPaid) {
+          const d = new Date(m.date + 'T12:00:00');
+          if (!isNaN(d.getTime())) {
+            const sortKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+            const label = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+            if (!monthlySummary[sortKey]) {
+              monthlySummary[sortKey] = { label, amount: 0 };
+            }
+            monthlySummary[sortKey].amount += Number(m.amount || 0);
+          }
+        }
+      });
+    });
+
+    const summaryData = Object.entries(monthlySummary)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, val]) => [val.label, `$ ${val.amount.toLocaleString('en-US')}`]);
+
+    if (summaryData.length > 0) {
+      doc.addPage(); 
+      y = 20;
+
+      doc.setFillColor(15, 23, 42);
+      doc.rect(15, y, pw - 30, 8, 'F');
+      doc.setFontSize(9);
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.text("PROJEÇÃO CONSOLIDADA DE FLUXO DE CAIXA MENSAL", pw/2, y + 5.5, { align: 'center' });
+      
+      y += 8;
+
+      autoTable(doc, {
+        startY: y,
+        margin: { left: 15, right: 15 },
+        head: [['MÊS / ANO', 'VALOR TOTAL PENDENTE (USD)']],
+        body: summaryData,
+        theme: 'striped',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold' },
+        columnStyles: {
+          1: { halign: 'right', fontStyle: 'bold', textColor: [244, 63, 94] }
+        },
+        didParseCell: (data) => {
+          if (data.section === 'head' && data.column.index === 1) {
+            data.cell.styles.halign = 'right';
+          }
+        }
+      });
+    }
+
+    doc.save(`Status_Consolidado_${new Date().getTime()}.pdf`);
+    toast.success("Relatório com Resumo Mensal gerado!");
+  };
+
+  // DROPZONES (NO TOPO)
+  const { getRootProps: gL, getInputProps: iL } = useDropzone({ onDrop: (f) => { const r = new FileReader(); r.onload = () => { localStorage.setItem('ADUANAPRO_COMPANY_LOGO', r.result as string); window.location.reload(); }; r.readAsDataURL(f[0]); }, accept: {'image/*': []}, multiple: false });
+  const { getRootProps: gP, getInputProps: iP } = useDropzone({ onDrop: (f) => { const r = new FileReader(); r.onload = () => setForm(p => ({ ...p, productImage: r.result as string })); r.readAsDataURL(f[0]); }, accept: {'image/*': []}, multiple: false });
+  
+  // NOVO: Dropzone para Commercial Invoice (Preenchimento Automático)
+  const { getRootProps: gCI, getInputProps: iCI, isDragActive: isDragCI } = useDropzone({ 
+    onDrop: async (f) => {
+      setLoading(true);
+      const r = new FileReader();
+      r.onload = async () => {
+        try {
+          const t = await extractTextFromPDF(f[0]);
+          const ex = await parsePaymentReceiptWithGroq(r.result as string, f[0].type, t);
+          
+          if (ex) {
+            if (ex.documentType === 'SWIFT' || ex.documentType === 'OTHER') {
+              // Lógica de Conciliação para Comprovantes
+              const paidAmount = Number(ex.contractTotal || ex.amount || 0);
+              const milestoneToPay = form.milestones.find(m => !m.isPaid && Math.abs(m.amount - paidAmount) < 5); // Tolerância de $5
+              
+              if (milestoneToPay) {
+                updateMilestone(milestoneToPay.id, { isPaid: true, date: ex.paymentDate || todayStr });
+                toast.success(`Pagamento de $${paidAmount} conciliado com a parcela: ${milestoneToPay.description}!`);
+              } else {
+                toast.info(`Comprovante de $${paidAmount} detectado, mas não encontrei parcela correspondente.`);
+              }
+              
+              if (ex.exchangeRate && ex.exchangeRate > 0) {
+                setForm(p => ({ ...p, exchangeRate: ex.exchangeRate }));
+              }
+            } else {
+              // Lógica para Invoices / Proformas
+              setForm(p => ({
+                ...p,
+                supplierName: ex.supplierName !== 'N/I' ? ex.supplierName : p.supplierName,
+                ciNumber: ex.ciNumber !== 'N/I' ? ex.ciNumber : p.ciNumber,
+                contractTotal: Number(ex.contractTotal || p.contractTotal),
+                bankDetails: ex.bankDetails !== 'N/I' ? ex.bankDetails : p.bankDetails,
+                currency: ex.currency || p.currency
+              }));
+
+              if (ex.items && Array.isArray(ex.items) && ex.items.length > 0) {
+                const itemDesc = ex.items.map((i: any) => `${i.quantity}x ${i.description}`).join(', ');
+                setForm(p => ({ ...p, productName: itemDesc }));
+              }
+
+              toast.success("Dados da Invoice extraídos com sucesso!");
+            }
+          }
+        } catch(e: any) {
+          console.error(e);
+          toast.error("Erro ao ler documento: " + (e.message || "Erro desconhecido"));
+        } finally {
+          setLoading(false);
+        }
+      };
+      r.readAsDataURL(f[0]);
+    }, 
+    accept: {'image/*': [], 'application/pdf': []}, 
+    multiple: false 
+  });
+
+  const { getRootProps: gB, getInputProps: iB, isDragActive: isDragB } = useDropzone({ onDrop: async (f) => { const r = new FileReader(); r.onload = async () => { setForm(p => ({ ...p, bankImage: r.result as string })); setLoading(true); try { const t = await extractTextFromPDF(f[0]); const ex = await parsePaymentReceiptWithGroq(r.result as string, f[0].type, t); if (ex.bankDetails) setForm(p => ({ ...p, bankDetails: ex.bankDetails })); } catch(e: any){ console.error(e); toast.error("Erro no Bank: " + (e.message || "")); } finally { setLoading(false); } }; r.readAsDataURL(f[0]); }, accept: {'image/*': [], 'application/pdf': []}, multiple: false });
+
+  const shipmentDate = useMemo(() => {
+    const d = new Date(form.orderDate + 'T12:00:00');
+    if (isNaN(d.getTime())) return "N/E";
+    d.setDate(d.getDate() + (Number(form.productionDays) || 0) + 10);
+    return d.toLocaleDateString('pt-BR');
+  }, [form.orderDate, form.productionDays]);
+
+  const sendWhatsapp = (p: any) => {
+    const text = `💼 *SOLICITAÇÃO DE PAGAMENTO - ${form.supplierName}*\n\n` +
+                 `${form.recipientName}, bom dia! 🏦 gostaria de formalizar o pedido de lançamento de câmbio conforme abaixo:\n\n` +
+                 `*Ref. Pedido:* ${p.ref} 📄\n` +
+                 `*Containers:* ${form.containerNumber || 'Não especificado'}\n` +
+                 `*Produto:* ${form.productName || 'N/I'}\n` +
+                 `*Previsão de Embarque:* ${shipmentDate} 🚢\n` +
+                 `----------------------------------\n\n` +
+                 `*MILESTONE:* ${p.description}\n` +
+                 `*VALOR:* $ ${Number(p.amount).toLocaleString('pt-BR')}\n` +
+                 `*DATA PROGRAMADA:* ${new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')}\n\n` +
+                 `🏦 *DADOS BANCÁRIOS / OBSERVAÇÕES:*\n` +
+                 `${form.bankDetails || 'Consultar Invoice Anexa'}\n\n` +
+                 `Fico no aguardo do comprovante de pagamento, obrigado! 🤝\n\n` +
+                 `#Pagamento_${p.ref.replace(/\s/g, '')}_`;
+    setWhatsappText(text);
+    setShowMsg(true);
+  };
+
+  const sendGlobalWhatsapp = () => {
+    const totalPaid = form.milestones.filter((m: any) => m.isPaid).reduce((acc: number, cur: any) => acc + Number(cur.amount), 0);
+    const totalUnpaid = form.contractTotal - totalPaid;
+    const paidPct = ((totalPaid / (form.contractTotal || 1)) * 100).toFixed(1);
+    const unpaidPct = ((totalUnpaid / (form.contractTotal || 1)) * 100).toFixed(1);
+    const brlValue = (form.contractTotal * (form.exchangeRate || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const m = (val: any) => `\`${val}\``; // Helper para monoespaçado
+
+    let text = `💼 *SOLICITAÇÃO DE PAGAMENTO - ${form.supplierName}*\n\n` +
+               `${form.recipientName}, bom dia! 🏦 gostaria de formalizar o pedido de lançamento de câmbio conforme abaixo:\n\n` +
+               `*Ref. Pedido:* ${m(form.ciNumber)} 📄\n` +
+               `*Containers:* ${form.containerNumber || 'Não especificado'}\n` +
+               `*Produto:* ${form.productName || 'N/I'}\n` +
+               `*Previsão de Embarque:* ${m(shipmentDate)} 🚢\n` +
+               `----------------------------------\n` +
+               `*VALOR TOTAL DO CONTRATO:* 💰 USD ${m(form.contractTotal.toLocaleString('pt-BR'))} (R$ ${m(brlValue)})\n` +
+               `*TOTAL JÁ LIQUIDADO:* USD ${m(totalPaid.toLocaleString('pt-BR'))} (${m(paidPct)}%)\n` +
+               `*SALDO REMANESCENTE:* USD ${m(totalUnpaid.toLocaleString('pt-BR'))} (${m(unpaidPct)}%)\n\n` +
+               `*PARCELAS CONTRATO:*\n`;
+               
+    form.milestones.forEach((p: any) => {
+      const dateFormatted = new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR');
+      const isToday = p.date === todayStr;
+      const line = `• Vencimento: ${m(dateFormatted)} | Valor: USD ${m(p.amount.toLocaleString('pt-BR'))} (${m(p.percentage)}%)${isToday ? ' <--- HOJE' : ''}`;
+      text += p.isPaid ? `~${line}~\n` : `${line}\n`;
+    });
+    
+    text += `\n🏦 *DADOS BANCÁRIOS / OBSERVAÇÕES:*\n` +
+            `${form.bankDetails || 'Consultar Invoice Anexa'}\n\n` +
+            `Fico no aguardo do comprovante de pagamento, obrigado! 🤝\n\n` +
+            `#Pagamento_${form.ciNumber.replace(/\s/g, '')}_`;
+            
+    setWhatsappText(text);
+    setShowMsg(true);
+  };
+
+  const exportData = () => {
+    const data = {
+      records: history,
+      logo: companyLogo
+    };
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AduanaPro_Backup_${new Date().toLocaleDateString('pt-BR')}.json`;
+    a.click();
+    toast.success("Backup gerado com sucesso!");
+  };
+
+  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = JSON.parse(evt.target?.result as string);
+        if (data.records) {
+          localStorage.setItem('ADUANAPRO_SUPPLIER_PAYMENTS', JSON.stringify(data.records));
+          if (data.logo) localStorage.setItem('ADUANAPRO_COMPANY_LOGO', data.logo);
+          window.location.reload();
+        }
+      } catch (err) {
+        toast.error("Arquivo de backup inválido");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(whatsappText);
+      toast.success("Mensagem copiada!");
+    } catch (err) {
+      toast.error("Erro ao copiar mensagem.");
+    }
+  };
+
+  const totalContract = Number(form.contractTotal) || 0;
+  const totalPaid = form.milestones.filter((m: any) => m.isPaid).reduce((acc, m) => acc + Number(m.amount), 0);
+  const totalPending = totalContract - totalPaid;
+  const paidPct = totalContract > 0 ? (totalPaid / totalContract) * 100 : 0;
+  const pendingPct = totalContract > 0 ? (totalPending / totalContract) * 100 : 0;
+
+  const dict = {
+    PT: {
+      title: "Relatório de Pagamento",
+      contractTotal: "TOTAL DO CONTRATO",
+      amountPaid: "VALOR PAGO",
+      remainingBalance: "SALDO REMANESCENTE",
+      ledger: "EXTRATO DE MARCOS (PAYMENT LEDGER)",
+      paidPrefix: "Pago: USD",
+      date: "DATA",
+      description: "DESCRIÇÃO/MILESTONE",
+      share: "SHARE",
+      value: "USD VALUE",
+      confirmed: "PAGAMENTO CONFIRMADO",
+      awaiting: "AGUARDANDO LIQUIDAÇÃO",
+      totalContract: "Total do Contrato:",
+      totalSettled: "Total Liquidado:"
+    },
+    EN: {
+      title: "Payment Report",
+      contractTotal: "CONTRACT TOTAL",
+      amountPaid: "AMOUNT PAID",
+      remainingBalance: "REMAINING BALANCE",
+      ledger: "PAYMENT LEDGER",
+      paidPrefix: "Paid: USD",
+      date: "DATE",
+      description: "DESCRIPTION/MILESTONE",
+      share: "SHARE",
+      value: "USD VALUE",
+      confirmed: "PAYMENT CONFIRMED",
+      awaiting: "AWAITING SETTLEMENT",
+      totalContract: "Total Contract:",
+      totalSettled: "Total Settled:"
+    }
+  };
+  const t = dict[visualLanguage];
+
+  return (
+    <div className="max-w-[1600px] mx-auto p-4 md:p-6 bg-[#f8fafc] min-h-screen">
+      {showVisualReport && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[200] flex flex-col items-center p-4 py-10 overflow-y-auto custom-scrollbar">
+          <div className="w-full max-w-[800px] flex justify-end mb-4 shrink-0 gap-2">
+             <div className="bg-white/10 p-1 rounded-xl flex gap-1 items-center mr-auto">
+               <button onClick={() => setVisualLanguage('PT')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${visualLanguage === 'PT' ? 'bg-white text-slate-900 shadow-lg' : 'text-white/50 hover:text-white'}`}>Português</button>
+               <button onClick={() => setVisualLanguage('EN')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${visualLanguage === 'EN' ? 'bg-white text-slate-900 shadow-lg' : 'text-white/50 hover:text-white'}`}>English</button>
+             </div>
+             <button onClick={() => setShowVisualReport(false)} className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center hover:bg-white/20 transition-all text-white"><X/></button>
+          </div>
+          
+          <div className="bg-white w-full max-w-[800px] rounded-xl shadow-2xl p-10 font-sans relative shrink-0">
+            <div className="flex flex-col items-center mb-8">
+              {companyLogo ? <img src={companyLogo} className="h-16 mb-4 object-contain" /> : <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-3xl mb-4">m</div>}
+              <h1 className="text-3xl font-black text-slate-900 tracking-tight">{t.title}</h1>
+              <p className="text-[11px] font-black text-orange-500 uppercase mt-1 tracking-widest">OFFICIAL ORDER VERIFICATION</p>
+            </div>
+            
+            <hr className="border-t border-slate-100 mb-8" />
+            
+            <div className="flex justify-between items-end mb-10">
+              <div>
+                <h2 className="text-lg font-black text-slate-900 uppercase max-w-[400px] leading-tight">{form.supplierName}</h2>
+                <p className="text-[10px] font-bold text-slate-500 uppercase mt-2">REFERENCE: {form.ciNumber}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">{t.contractTotal}</p>
+                <p className="text-2xl font-black text-slate-900">USD {totalContract.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-6 mb-10">
+              <div className="bg-emerald-50 rounded-2xl p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-[11px] font-black text-emerald-600 uppercase">{t.amountPaid}</span>
+                  <span className="text-[11px] font-black text-emerald-600">{paidPct.toFixed(1)}%</span>
+                </div>
+                <p className="text-3xl font-black text-emerald-500 mb-6">USD {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <div className="h-3 w-full bg-emerald-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${paidPct}%` }}></div>
+                </div>
+              </div>
+              
+              <div className="bg-rose-50 rounded-2xl p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-[11px] font-black text-rose-600 uppercase">{t.remainingBalance}</span>
+                  <span className="text-[11px] font-black text-rose-600">{pendingPct.toFixed(1)}%</span>
+                </div>
+                <p className="text-3xl font-black text-rose-500 mb-6">USD {totalPending.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <div className="h-3 w-full bg-rose-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-rose-500 rounded-full transition-all" style={{ width: `${pendingPct}%` }}></div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-between items-end mb-4 px-2">
+              <h3 className="text-[12px] font-black text-slate-500 uppercase tracking-widest">{t.ledger}</h3>
+              <p className="text-[11px] font-bold text-slate-500">{t.paidPrefix} {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+            
+            <div className="w-full mb-10">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-slate-100">
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase">{t.date}</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase">{t.description}</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase text-center">{t.share}</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase text-right">{t.value}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...form.milestones].sort((a:any,b:any) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((m: any, i: number) => {
+                    const realPct = totalContract > 0 ? Math.round((Number(m.amount) / totalContract) * 100) : m.percentage;
+                    return (
+                      <tr key={i} className={`border-b border-slate-100 ${m.isPaid ? 'bg-yellow-50/50 border-l-4 border-l-yellow-400' : 'bg-white border-l-4 border-l-transparent'}`}>
+                        <td className="py-4 px-4">
+                          <p className="text-[11px] font-bold text-slate-700">{m.date}</p>
+                          <p className={`text-[8px] font-black uppercase mt-1 ${m.isPaid ? 'text-emerald-500' : 'text-slate-400'}`}>{m.isPaid ? t.confirmed : t.awaiting}</p>
+                        </td>
+                        <td className="py-4 px-4 text-[11px] font-medium text-slate-600">{m.description}</td>
+                        <td className="py-4 px-4 text-[11px] font-bold text-slate-600 text-center">{realPct}%</td>
+                        <td className="py-4 px-4 text-[11px] font-black text-slate-900 text-right">USD {Number(m.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="bg-slate-50 p-6 rounded-2xl flex justify-between items-center">
+              <div className="space-y-4">
+                <div className="flex gap-4">
+                  <span className="text-[11px] font-black text-slate-500 uppercase w-32">{t.totalContract}</span>
+                  <span className="text-[12px] font-black text-slate-900">USD {totalContract.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex gap-4">
+                  <span className="text-[11px] font-black text-slate-500 uppercase w-32">{t.totalSettled}</span>
+                  <span className="text-[12px] font-black text-emerald-500">USD {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({paidPct.toFixed(1)}%)</span>
+                </div>
+              </div>
+              <div className="bg-rose-500 rounded-xl p-5 text-center min-w-[200px] shadow-lg shadow-rose-500/20">
+                <p className="text-[9px] font-black text-rose-100 uppercase mb-1">{t.remainingBalance}</p>
+                <p className="text-xl font-black text-white">USD {totalPending.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showBulkImport && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[300] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-3xl rounded-[48px] shadow-2xl overflow-hidden animate-in zoom-in duration-300 border border-white/20">
+            <div className="p-10 bg-blue-600 text-white flex justify-between items-center relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+              <div className="relative z-10">
+                <h2 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-3"><Zap size={28} className="text-yellow-400 fill-yellow-400"/> Lançamento em Lote (IA)</h2>
+                <p className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-70">Cole o texto da tabela ou arraste um print do sistema</p>
+              </div>
+              <button onClick={() => setShowBulkImport(false)} className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center hover:bg-white/20 transition-all relative z-10"><X size={24}/></button>
+            </div>
+            <div className="p-10 space-y-8">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Texto da Tabela (Ctrl+V)</label>
+                   <span className="text-[8px] font-bold text-blue-500 uppercase px-2 py-1 bg-blue-50 rounded-lg">Focado em %, USD e Data</span>
+                </div>
+                <textarea 
+                  value={bulkInput}
+                  onChange={(e) => setBulkInput(e.target.value)}
+                  placeholder="Cole aqui o texto copiado da sua planilha, Excel ou outro sistema..."
+                  className="w-full h-40 p-6 bg-slate-50 border-2 border-slate-100 rounded-3xl text-[12px] font-bold text-slate-600 outline-none focus:border-blue-400 transition-all resize-none shadow-inner"
+                />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="p-8 border-2 border-dashed border-slate-200 rounded-[32px] flex flex-col items-center justify-center gap-4 hover:bg-slate-50 transition-all cursor-pointer relative group overflow-hidden">
+                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer z-20" onChange={(e) => e.target.files?.[0] && processBulkImport(e.target.files[0])} />
+                    <div className="w-14 h-14 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-all relative z-10"><ImageIcon size={28} /></div>
+                    <div className="text-center relative z-10">
+                      <p className="text-[10px] font-black text-slate-800 uppercase">Arraste um Print</p>
+                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">Extração Instantânea</p>
+                    </div>
+                 </div>
+                 
+                 <div className="flex flex-col justify-center gap-4">
+                    <button 
+                      onClick={() => processBulkImport(bulkInput)}
+                      disabled={loading || !bulkInput.trim()}
+                      className="w-full py-6 bg-slate-900 text-white rounded-[28px] font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-3"
+                    >
+                      {loading ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          <span>Processando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap size={18} className="text-yellow-400 fill-yellow-400" />
+                          <span>Iniciar Importação</span>
+                        </>
+                      )}
+                    </button>
+                    <p className="text-[8px] font-bold text-slate-400 text-center uppercase tracking-widest px-4 leading-relaxed">
+                      DICA: Copie a tabela inteira do seu sistema. Nossa IA irá ignorar o que não for financeiro.
+                    </p>
+                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showMsg && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black uppercase flex items-center gap-2"><MessageSquare className="text-emerald-400"/> Prévia do Câmbio</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Confira os dados antes de copiar</p>
+              </div>
+              <button onClick={() => setShowMsg(false)} className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center hover:bg-white/20 transition-all"><X/></button>
+            </div>
+            <div className="p-8">
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 max-h-[400px] overflow-y-auto custom-scrollbar">
+                <pre className="text-[12px] font-medium text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{whatsappText}</pre>
+              </div>
+              <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button onClick={copyToClipboard} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[11px] flex items-center justify-center gap-2 hover:bg-slate-800 transition-all active:scale-95 shadow-xl"><CheckCircle size={18}/> Copiar Mensagem</button>
+                <button onClick={() => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappText)}`, '_blank')} className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase text-[11px] flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all active:scale-95 shadow-xl"><MessageSquare size={18}/> Enviar p/ WhatsApp</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div className="flex items-center gap-3">
+          <div {...gL()} className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center shadow-xl cursor-pointer hover:bg-slate-800 transition-all overflow-hidden">
+            <input {...iL()} />
+            {companyLogo ? <img src={companyLogo} className="w-10 h-10 object-contain" /> : <DollarSign className="text-emerald-400" size={28} />}
+          </div>
+          <div><h1 className="text-3xl font-black text-slate-900 uppercase leading-none">Gestão Financeira</h1><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Safe Mode Active • <span className="text-emerald-500 animate-pulse">Distribuição Dinâmica V2 Ativa</span></p></div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={exportData} className="px-4 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-200 transition-all border border-slate-200" title="Exportar Backup"><FileDown size={18}/> Exportar</button>
+          <label className="px-4 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-200 transition-all border border-slate-200 cursor-pointer" title="Importar Backup">
+            <Upload size={18}/> Importar
+            <input type="file" accept=".json" onChange={importData} className="hidden" />
+          </label>
+          <div className="w-px h-12 bg-slate-200 mx-2 hidden md:block"></div>
+          <button onClick={clearForm} className="px-6 py-4 bg-blue-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-blue-600 transition-all shadow-lg"><Plus size={18}/> Novo</button>
+          <button onClick={duplicateRecord} className="px-6 py-4 bg-purple-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-purple-600 transition-all shadow-lg"><Copy size={18}/> Duplicar</button>
+          <button onClick={() => setShowVisualReport(true)} className="px-6 py-4 bg-indigo-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-indigo-600 transition-all shadow-lg"><FileText size={18}/> Relatório Visual</button>
+          <button onClick={sendGlobalWhatsapp} className="px-6 py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg"><MessageSquare size={18}/> WhatsApp Financeiro</button>
+          <button onClick={saveRecord} className="px-6 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg"><Save size={18}/> {(form as any).id ? 'Atualizar' : 'Salvar Novo'}</button>
+          <button onClick={exportStatusPDF} className="px-6 py-4 bg-orange-500 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-orange-600 transition-all shadow-lg"><FileCheck size={18}/> Status Report</button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-8 space-y-8">
+          {/* Grid de Uploads: CI e Foto do Produto lado a lado */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Super Dropzone para CI */}
+            <div {...gCI()} className={`group p-8 rounded-[40px] border-4 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center gap-3 ${isDragCI ? 'bg-blue-50 border-blue-500 scale-[1.02] shadow-2xl' : 'bg-white border-slate-100 hover:border-blue-300'}`}>
+              <input {...iCI()} />
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isDragCI ? 'bg-blue-500 text-white animate-bounce' : 'bg-blue-50 text-blue-500'}`}>
+                <Upload size={28} />
+              </div>
+              <div className="text-center">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter">Extrair Dados da CI</h3>
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[2px] mt-1">Arraste a Invoice aqui</p>
+              </div>
+            </div>
+
+            {/* Snapshot (Foto do Produto) - Agora em destaque ao lado da CI */}
+            <div {...gP()} className={`group p-8 rounded-[40px] border-4 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center gap-3 overflow-hidden ${form.productImage ? 'border-emerald-500 bg-emerald-50/30' : 'bg-white border-slate-100 hover:border-emerald-300'}`}>
+              <input {...iP()} />
+              {form.productImage ? (
+                <img src={form.productImage} className="w-full h-32 object-contain" />
+              ) : (
+                <>
+                  <div className="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center">
+                    <ImageIcon size={28} />
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter">Foto do Produto</h3>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[2px] mt-1">Arraste a Foto aqui</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100 space-y-8">
+            <div className="flex justify-between items-center"><h2 className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2"><LayoutGrid size={16} /> Audit Core</h2><div className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase">ETD: {shipmentDate}</div></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <div><label className="text-[9px] font-black text-slate-400 uppercase block">Exportador</label><input type="text" value={form.supplierName} onChange={(e) => setForm(p => ({ ...p, supplierName: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black uppercase border-none focus:ring-2 ring-blue-500/20 outline-none" /></div>
+                <div><label className="text-[9px] font-black text-slate-400 uppercase block">Produto</label><input type="text" value={form.productName} onChange={(e) => setForm(p => ({ ...p, productName: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[11px] font-black uppercase border-none focus:ring-2 ring-blue-500/20 outline-none" placeholder="Ex: Máquina de Corte" /></div>
+                
+                {/* NOVO: Data do Pedido e Prazo de Produção lado a lado */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-[9px] font-black text-blue-500 uppercase block">Data do Pedido</label><input type="date" value={form.orderDate} onChange={(e) => setForm(p => ({ ...p, orderDate: e.target.value }))} className="w-full p-4 bg-blue-50 rounded-2xl text-[11px] font-black outline-none border-none focus:ring-2 ring-blue-500/20" /></div>
+                  <div><label className="text-[9px] font-black text-blue-500 uppercase block">Produção (Dias)</label><input type="number" value={form.productionDays} onChange={(e) => setForm(p => ({ ...p, productionDays: Number(e.target.value) }))} className="w-full p-4 bg-blue-50 rounded-2xl text-[11px] font-black outline-none border-none focus:ring-2 ring-blue-500/20" /></div>
+                </div>
+
+                <div><label className="text-[10px] font-black text-blue-600 uppercase block mb-1">Número da Invoice (CI)</label><input type="text" placeholder="Ex: CI-2024-001" value={form.ciNumber} onChange={(e) => setForm(p => ({ ...p, ciNumber: e.target.value }))} className="w-full p-5 bg-blue-50 border-2 border-blue-200 rounded-2xl text-[13px] font-black uppercase text-blue-900 shadow-sm focus:ring-4 ring-blue-500/10 outline-none transition-all" /></div>
+                <div {...gB()} className="w-full h-24 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center cursor-pointer overflow-hidden group hover:border-blue-400 transition-all"><input {...iB()} />{form.bankImage ? <img src={form.bankImage} className="w-full h-full object-cover" /> : <div className="flex flex-col items-center text-slate-300 group-hover:text-blue-400"><FileDown size={24}/><span className="text-[8px] font-black uppercase mt-1">SWIFT / Bank</span></div>}</div>
+              </div>
+              <div className="space-y-4">
+                <div><label className="text-[9px] font-black text-slate-400 uppercase block">Total USD $</label><input type="number" value={form.contractTotal} onChange={(e) => setForm(p => ({ ...p, contractTotal: Number(e.target.value) }))} className="w-full p-4 bg-slate-900 text-emerald-400 rounded-2xl text-[16px] font-black font-mono shadow-inner border-none" /></div>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 h-40 flex flex-col justify-center">
+                   <h3 className="text-[10px] font-black text-slate-400 uppercase mb-2 flex items-center gap-2"><Globe2 size={14}/> Containers</h3>
+                   <textarea value={form.containerNumber} onChange={(e) => setForm(p => ({ ...p, containerNumber: e.target.value }))} className="w-full h-full bg-transparent border-none text-[10px] font-bold text-slate-600 outline-none resize-none" placeholder="Lista de Containers..."></textarea>
+                </div>
+              </div>
+            </div>
+            <div className="pt-6 border-t border-slate-100 flex gap-4">
+              <div className="flex-1"><label className="text-[9px] font-black text-purple-600 uppercase block">Condição ({form.paymentTerms})</label><input type="text" value={form.paymentTerms} onChange={(e) => setForm(p => ({ ...p, paymentTerms: e.target.value }))} className="w-full p-4 bg-purple-50 rounded-2xl text-[12px] font-black text-purple-900 border-none outline-none focus:ring-2 ring-purple-500/20" /></div>
+              <div className="flex-1"><label className="text-[9px] font-black text-slate-400 uppercase block">Responsável</label><input type="text" value={form.recipientName} onChange={(e) => setForm(p => ({ ...p, recipientName: e.target.value }))} className="w-full p-4 bg-slate-50 rounded-2xl text-[12px] font-black text-slate-900 border-none outline-none focus:ring-2 ring-blue-500/20" /></div>
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100"><h2 className="text-[12px] font-black text-slate-800 uppercase tracking-widest mb-6 flex items-center gap-2"><CheckCircle size={18} className="text-emerald-500" /> Milestones</h2><div className="space-y-4">{form.milestones.map((m: Milestone) => (<div key={m.id} className="p-4 rounded-[28px] border bg-slate-50 border-slate-100"><div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end"><div><label className="text-[8px] font-black text-slate-400 uppercase">Fase</label><input type="text" value={m.description} onChange={(e) => updateMilestone(m.id, { description: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black uppercase outline-none" /></div><div><label className="text-[8px] font-black text-slate-400 uppercase">Data</label><input type="date" value={m.date} onChange={(e) => updateMilestone(m.id, { date: e.target.value })} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[10px] font-black outline-none" /></div>
+  <div className="space-y-2">
+    <div>
+      <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Percentual (%)</label>
+      <input type="number" value={m.percentage} onChange={(e) => {
+        const newPct = Number(e.target.value);
+        const total = Number(form.contractTotal) || 0;
+        const newAmount = (total * newPct) / 100;
+        updateMilestone(m.id, { percentage: newPct, amount: newAmount });
+      }} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[11px] font-black outline-none" />
+    </div>
+    <div>
+      <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Valor (USD $)</label>
+      <input type="number" value={m.amount} onChange={(e) => {
+        const newAmount = Number(e.target.value);
+        const total = Number(form.contractTotal) || 1;
+        const newPct = (newAmount / total) * 100;
+        updateMilestone(m.id, { amount: newAmount, percentage: Number(newPct.toFixed(2)) });
+      }} className="w-full p-2 bg-white border border-slate-100 rounded-lg text-[11px] font-black outline-none" />
+    </div>
+  </div>
+<div className="flex gap-2">
+  <button onClick={() => updateMilestone(m.id, { isPaid: !m.isPaid })} className={`flex-1 p-2 rounded-lg text-[9px] font-black uppercase transition-all shadow-sm ${m.isPaid ? 'bg-emerald-500 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>{m.isPaid ? 'PAGO' : 'PEND'}</button>
+  <button onClick={() => sendWhatsapp({...m, ref: form.ciNumber})} className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all border border-emerald-100"><MessageSquare size={16}/></button>
+  <button onClick={() => setForm(p => ({ ...p, milestones: p.milestones.filter(x => x.id !== m.id) }))} className="w-10 h-10 bg-red-50 text-red-400 rounded-lg flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
+</div></div></div>))}</div>
+  <div className="mt-6 flex gap-3">
+    <button onClick={addMilestone} className="flex-1 py-4 border-2 border-dashed border-slate-200 rounded-2xl text-[10px] font-black text-slate-400 uppercase transition-all hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition-all">+ Add Parcela</button>
+    <button onClick={() => setShowBulkImport(true)} className="px-6 py-4 bg-blue-50 text-blue-600 border-2 border-dashed border-blue-200 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-blue-100 transition-all"><Zap size={16}/> Importar Lote (IA)</button>
+  </div>
+</div>
+        </div>
+
+        <div className="lg:col-span-4 space-y-8">
+          <div className="p-8 bg-slate-900 rounded-[40px] shadow-2xl text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+            <div className="flex justify-between items-center mb-6 relative z-10"><h3 className="text-[11px] font-black text-emerald-400 uppercase flex items-center gap-2"><TrendingUp size={18} /> Próximo Passo</h3>{nextPayments.length > 0 && (<button onClick={exportNextPDF} className="w-10 h-10 bg-emerald-500 text-white rounded-xl flex items-center justify-center shadow-lg hover:bg-emerald-600 transition-all"><Download size={18}/></button>)}</div>
+            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar relative z-10">
+              {nextPayments.map((p: any, idx) => {
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const pDate = new Date(p.date + 'T12:00:00');
+                pDate.setHours(0,0,0,0);
+                const diffDays = Math.ceil((pDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                
+                const isUrgent = diffDays <= 2;
+                const isClosest = !isUrgent && idx === 0;
+
+                return (
+                <div key={idx} className={`p-3 bg-slate-800/50 rounded-2xl border flex items-center gap-4 group hover:bg-slate-800 transition-all ${isUrgent ? 'border-red-500/50' : isClosest ? 'border-yellow-500/50' : 'border-slate-700/50'}`}>
+                  {p.productImage ? (
+                    <img src={p.productImage} className="w-14 h-14 rounded-xl object-cover bg-white/5 shrink-0" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-white/5 flex items-center justify-center shrink-0 text-slate-600">
+                       <ImageIcon size={20} />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-center mb-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-black text-emerald-400 uppercase truncate pr-2">{p.ref}</span>
+                        <span className="bg-blue-500/20 text-blue-400 text-[8px] font-black px-1.5 py-0.5 rounded-md">{p.pIndex}/{p.pTotal}</span>
+                      </div>
+                      <span className={`text-[9px] font-black font-mono shrink-0 ${isUrgent ? 'text-red-400' : isClosest ? 'text-yellow-400' : 'text-slate-400'}`}>{new Date(p.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-[14px] font-black text-white truncate">$ {Number(p.amount||0).toLocaleString('pt-BR')}</p>
+                      {isUrgent && (
+                        <div className="flex h-2 w-2 relative" title="Vence em até 2 dias">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                        </div>
+                      )}
+                      {isClosest && (
+                        <div className="flex h-2 w-2 relative" title="Próximo Vencimento">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase truncate">{p.supplier}</p>
+                  </div>
+                  <button onClick={() => sendWhatsapp(p)} className="w-10 h-10 shrink-0 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center opacity-80 group-hover:opacity-100 group-hover:bg-emerald-500 group-hover:text-white transition-all"><MessageSquare size={16}/></button>
+                </div>
+              )})}
+              {selectedIds.length === 0 && <div className="text-center py-12 opacity-30"><AlertCircle className="mx-auto mb-2" size={32} /><p className="text-[9px] font-black uppercase">Marque no histórico</p></div>}
+            </div>
+            <div className="mt-8 pt-6 border-t border-slate-800 relative z-10"><p className="text-[9px] text-slate-500 uppercase mb-1">Total Imediato</p><p className="text-3xl font-black text-emerald-400 font-mono tracking-tighter">$ {nextPayments.reduce((acc, p: any) => acc + Number(p.amount || 0), 0).toLocaleString('pt-BR')}</p></div>
+          </div>
+
+          <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-[11px] font-black text-slate-800 uppercase flex items-center gap-2"><History size={16} className="text-blue-500" /> Histórico</h3>
+              <button 
+                onClick={() => setSelectedIds(selectedIds.length === history.length ? [] : history.map(h => h.id))}
+                className="text-[9px] font-black text-blue-600 uppercase hover:underline"
+              >
+                {selectedIds.length === history.length ? 'Desmarcar Tudo' : 'Marcar Tudo'}
+              </button>
+            </div>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              {Array.isArray(history) && history.map((h: any) => {
+                const totalM = h.data?.milestones?.length || 0;
+                const paidM = h.data?.milestones?.filter((m: any) => m.isPaid).length || 0;
+                return (
+                  <div key={h.id} className="flex items-center gap-2 group">
+                    <div onClick={() => setSelectedIds(prev => prev.includes(h.id) ? prev.filter(id => id !== h.id) : [...prev, h.id])} className={`w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer transition-all ${selectedIds.includes(h.id) ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>
+                      {selectedIds.includes(h.id) ? <CheckSquare size={14}/> : <Square size={14}/>}
+                    </div>
+                    <div onClick={() => setForm({ ...h.data, id: h.id })} className="flex-1 p-4 rounded-2xl border bg-slate-50 border-slate-100 cursor-pointer hover:bg-slate-100 transition-all">
+                      <div className="flex justify-between items-start">
+                        <p className="text-[10px] font-black text-slate-900 uppercase truncate">{h.data?.ciNumber || "N/A"}</p>
+                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${paidM === totalM ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>{paidM}/{totalM}</span>
+                      </div>
+                      <p className="text-[9px] font-bold text-slate-500 truncate">{h.data?.supplierName}</p>
+                    </div>
+                    <button onClick={() => deleteRecord(h.id)} className="w-8 h-8 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button>
+                  </div>
+                );
+              })}
+              {history.length === 0 && <div className="text-center py-10 opacity-20"><History className="mx-auto mb-2" size={24}/><p className="text-[8px] font-black uppercase">Histórico Vazio</p></div>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
