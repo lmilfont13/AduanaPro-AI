@@ -569,8 +569,21 @@ export default function SupplierPayments({ data, onUpdate }: any) {
       const r = new FileReader();
       r.onload = async () => {
         try {
-          const t = await extractTextFromPDF(f[0]);
-          const ex = await parsePaymentReceiptWithGroq(r.result as string, f[0].type, t);
+          let t = await extractTextFromPDF(f[0]);
+          let visualData = r.result as string;
+
+          // Se o PDF não tem texto (escaneado), converte para imagem para a IA "ver"
+          if (!t || t.trim().length < 50) {
+             toast.info("Documento escaneado detectado. Iniciando leitura visual...");
+             try {
+               const imgBase64 = await pdfToImage(f[0]);
+               visualData = `data:image/jpeg;base64,${imgBase64}`;
+             } catch (err) {
+               console.error("Falha ao converter PDF para imagem", err);
+             }
+          }
+
+          const ex = await parsePaymentReceiptWithGroq(visualData, f[0].type, t);
           
           if (ex) {
             if (ex.documentType === 'SWIFT' || ex.documentType === 'OTHER') {
@@ -606,10 +619,12 @@ export default function SupplierPayments({ data, onUpdate }: any) {
 
               toast.success("Dados da Invoice extraídos com sucesso!");
             }
+          } else {
+            toast.error("Não foi possível extrair dados automáticos. Tente um arquivo mais nítido.");
           }
         } catch(e: any) {
           console.error(e);
-          toast.error("Erro ao ler documento: " + (e.message || "Erro desconhecido"));
+          toast.error("Erro técnico na leitura: " + (e.message || "Verifique sua chave de API"));
         } finally {
           setLoading(false);
         }

@@ -54,16 +54,21 @@ const callAI = async (prompt: string, base64Image?: string, pdfText?: string): P
   }
 
   let finalPrompt = prompt;
-  if (!pdfText && base64Image) {
+  
+  // Se o texto do PDF for muito curto ou inexistente, pode ser um PDF escaneado (imagem)
+  const isPdfTextEmpty = !pdfText || pdfText.trim().length < 50;
+
+  if (isPdfTextEmpty && base64Image) {
     const isActuallyBase64 = base64Image.length > 100 && !base64Image.includes(" ");
     if (isActuallyBase64) {
       try {
         const sanitizedBase64 = base64Image.trim().replace(/\s/g, '');
         const formattedImage = sanitizedBase64.startsWith('data:') ? sanitizedBase64 : `data:image/jpeg;base64,${sanitizedBase64}`;
         const ocrResult = await Tesseract.recognize(formattedImage, 'por+eng');
-        finalPrompt = `TEXTO DO DOCUMENTO (OCR):\n${ocrResult.data.text}\n\nSOLICITAÇÃO:\n${prompt}`;
+        finalPrompt = `TEXTO DO DOCUMENTO (EXTRAÍDO VIA OCR):\n${ocrResult.data.text}\n\nSOLICITAÇÃO:\n${prompt}`;
       } catch (e) {
         console.warn("OCR falhou");
+        finalPrompt = `SOLICITAÇÃO:\n${prompt}\n\n(O documento parece ser uma imagem mas o OCR falhou)`;
       }
     } else {
       finalPrompt = `TEXTO DO DOCUMENTO:\n${base64Image}\n\nSOLICITAÇÃO:\n${prompt}`;
@@ -102,21 +107,39 @@ const callAI = async (prompt: string, base64Image?: string, pdfText?: string): P
       });
 
       const content = completion.choices[0]?.message?.content || "";
-      const lowerContent = content.toLowerCase();
-      if (lowerContent.includes("desculpe") || lowerContent.includes("não posso") || lowerContent.includes("impossible") || lowerContent.includes("protected") || (lowerContent.includes("sorry") && !lowerContent.includes("{"))) {
+      console.log(`IA Response (${modelName}):`, content);
+
+      if (!content || content.length < 2) {
+        console.warn(`Resposta vazia do modelo ${modelName}`);
         continue;
       }
 
-      const cleaned = cleanJsonString(content);
-      const result = JSON.parse(cleaned);
-      if (typeof localStorage !== 'undefined') localStorage.setItem('GROQ_MODEL', modelName);
-      return result;
+      const lowerContent = content.toLowerCase();
+      if (lowerContent.includes("desculpe") || lowerContent.includes("não posso") || (lowerContent.includes("sorry") && !lowerContent.includes("{"))) {
+        console.warn(`Modelo ${modelName} recusou a tarefa`);
+        continue;
+      }
+
+      try {
+        const cleaned = cleanJsonString(content);
+        const result = JSON.parse(cleaned);
+        if (typeof localStorage !== 'undefined') localStorage.setItem('GROQ_MODEL', modelName);
+        return result;
+      } catch (parseErr) {
+        console.error(`Erro ao parsear JSON do modelo ${modelName}:`, parseErr);
+        continue;
+      }
     } catch (error: any) {
+      console.error(`Erro no modelo ${modelName}:`, error);
       lastError = error;
       const isRateLimit = error.status === 429;
       if (isRateLimit) continue;
       throw error;
     }
+  }
+  
+  if (lastError) {
+    toast.error(`Falha na IA: ${lastError.message || "Erro desconhecido"}`);
   }
   throw lastError;
 };
