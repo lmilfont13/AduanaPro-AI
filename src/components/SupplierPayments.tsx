@@ -986,6 +986,19 @@ export default function SupplierPayments({ data, onUpdate }: any) {
           <div><h1 className="text-3xl font-black text-slate-900 uppercase leading-none">Gestão Financeira</h1><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Safe Mode Active • <span className="text-emerald-500 animate-pulse">Distribuição Dinâmica V2 Ativa</span></p></div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button 
+            onClick={() => {
+              const key = prompt("Insira sua GROQ API KEY:", localStorage.getItem('GROQ_API_KEY') || "");
+              if (key !== null) {
+                localStorage.setItem('GROQ_API_KEY', key);
+                toast.success("Chave de API atualizada!");
+              }
+            }} 
+            className="px-4 py-4 bg-yellow-50 text-yellow-600 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-yellow-100 transition-all border border-yellow-200" 
+            title="Configurar IA"
+          >
+            <Bot size={18}/> API Key
+          </button>
           <button onClick={exportData} className="px-4 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-200 transition-all border border-slate-200" title="Exportar Backup"><FileDown size={18}/> Exportar</button>
           <label className="px-4 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-200 transition-all border border-slate-200 cursor-pointer" title="Importar Backup">
             <Upload size={18}/> Importar
